@@ -349,11 +349,11 @@
 
   // MARK: - Focus
 
-  var Z = {TOP: 'top', CARDS: 'cards', SHELF: 'shelf', DRAWER: 'drawer', APPS: 'apps', SETTINGS: 'settings', EDIT: 'edit', LANG: 'lang', CITY: 'city', KEY: 'key', ABOUT: 'about', SEARCH: 'search'};
+  var Z = {TOP: 'top', CARDS: 'cards', SHELF: 'shelf', DRAWER: 'drawer', APPS: 'apps', SETTINGS: 'settings', EDIT: 'edit', LANG: 'lang', CITY: 'city', KEY: 'key', ABOUT: 'about', SEARCH: 'search', TEAMS: 'teams'};
   var st = {zone: Z.SHELF, top: 0, tab: 0, card: 0, shelf: 0, drawer: 0, grid: 0, row: 0, edit: 0, lang: 0, city: 0, key: 0};
   var cards = [];
 
-  function sheetOpen() { return st.zone === Z.APPS || st.zone === Z.SETTINGS || st.zone === Z.EDIT || st.zone === Z.LANG || st.zone === Z.CITY || st.zone === Z.KEY || st.zone === Z.ABOUT || st.zone === Z.SEARCH; }
+  function sheetOpen() { return st.zone === Z.APPS || st.zone === Z.SETTINGS || st.zone === Z.EDIT || st.zone === Z.LANG || st.zone === Z.CITY || st.zone === Z.KEY || st.zone === Z.ABOUT || st.zone === Z.SEARCH || st.zone === Z.TEAMS; }
 
   function updateFocus() {
     var i, list;
@@ -385,6 +385,7 @@
     focusRows($('citypick'), st.city, st.zone === Z.CITY);
     focusRows($('keypick'), st.key, st.zone === Z.KEY);
     focusSearch();
+    focusRows($('teampick'), tmRow, st.zone === Z.TEAMS);
     setClass(body, 'drawer-open', st.zone === Z.DRAWER);
     followSoon();
   }
@@ -887,9 +888,74 @@
     });
   }
 
+  // MARK: - Teams to follow: ← → changes the league, OK marks a team (up to 3)
+
+  var LEAGUES = [['bra.1', 'Brasileirão'], ['conmebol.libertadores', 'Libertadores'], ['eng.1', 'Premier League'],
+    ['esp.1', 'La Liga'], ['ita.1', 'Serie A (Itália)']];
+  var MAX_TEAMS = 3, tmLeague = 0, tmList = [], tmRow = 0;
+
+  function isFollowed(league, id) {
+    var list = followed();
+    for (var i = 0; i < list.length; i++) if (list[i].league === league && list[i].id === id) return true;
+    return false;
+  }
+
+  function renderTeams() {
+    var box = $('teampick').firstChild, league = LEAGUES[tmLeague];
+    box.innerHTML = '';
+    el('div', 'title', box, '‹  ' + league[1] + '  ›');
+    var list = el('div', 'list', box), holder = el('div', 'rows', list);
+    list.style.height = Math.min(Math.max(tmList.length, 1), 7) * 78 + 'px';
+    for (var i = 0; i < tmList.length; i++) {
+      var row = el('div', 'row', holder, tmList[i].name);
+      if (isFollowed(league[0], tmList[i].id)) sym('check', el('span', 'value', row));
+      hover(row, Z.TEAMS, i);
+    }
+    el('div', 'hint', box, tmList.length ? '← → muda a liga · OK marca (até ' + MAX_TEAMS + ') · Voltar sai' : 'Carregando…');
+    updateFocus();
+  }
+
+  function loadTeams() {
+    var want = tmLeague;
+    tmList = [];
+    tmRow = 0;
+    renderTeams();
+    TV.service('teams', {league: LEAGUES[want][0]}, function (res) {
+      if (want !== tmLeague || st.zone !== Z.TEAMS) return;
+      tmList = (res && res.teams) || [];
+      renderTeams();
+    });
+  }
+
+  function openTeams() {
+    setClass($('settings'), 'open', false);
+    st.zone = Z.TEAMS;
+    setClass($('teampick'), 'open', true);
+    loadTeams();
+  }
+
+  function toggleTeam() {
+    var t = tmList[tmRow], league = LEAGUES[tmLeague][0];
+    if (!t) return;
+    var list = followed().filter(function (x) { return !(x.league === league && x.id === t.id); });
+    if (list.length === followed().length) {
+      if (list.length >= MAX_TEAMS) { toast('Até ' + MAX_TEAMS + ' times: desmarque um antes.'); return; }
+      list.push({league: league, id: t.id, name: t.name});
+    }
+    Prefs.set('teams', list);
+    renderTeams();
+    pollFootball();
+  }
+
+  function closeTeams() {
+    setClass($('teampick'), 'open', false);
+    openSettings();
+  }
+
   // MARK: - Football: the followed teams' live, next or last match beside the tabs
 
-  var TEAMS = [{league: 'bra.1', id: '819'}];   // Flamengo; ESPN ids, league slug as in its API
+  // Followed teams (ESPN ids, league slug as in its API), picked in Home Settings; Flamengo until then.
+  function followed() { return Prefs.get('teams', [{league: 'bra.1', id: '819', name: 'Flamengo'}]); }
   var FOOTBALL_EVERY = 5 * 60000, FOOTBALL_LIVE_EVERY = 60000, footballTimer = 0;
   var WEEKDAYS = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
 
@@ -930,7 +996,7 @@
     }
     clearTimeout(footballTimer);
     footballTimer = setTimeout(pollFootball, live ? FOOTBALL_LIVE_EVERY : FOOTBALL_EVERY);
-    if (live) TV.watchGoals(TEAMS);   // the service keeps watching while another app is in front
+    if (live) TV.watchGoals(followed());   // the service keeps watching while another app is in front
     var soon = teams[0] && teams[0].next;
     if (soon && soon.state === 'pre' && soon.home && soon.away) {
       TV.service('remind', {date: soon.date, text: soon.home.abbr + ' × ' + soon.away.abbr + ' começa em 10 minutos'});
@@ -957,7 +1023,7 @@
 
   function pollFootball() {
     if (document.hidden) { footballTimer = setTimeout(pollFootball, FOOTBALL_EVERY); return; }
-    TV.football(TEAMS, showFootball);
+    TV.football(followed(), showFootball);
   }
 
   // MARK: - Constellation background: drawn once at half size, so it costs no frames.
@@ -1434,6 +1500,8 @@
         step: function (d) { Prefs.set('cards', 3 + (Prefs.cards() - 3 + (d || 1) + 4) % 4); renderCards(); }},
       {label: tr('Cartoons and anime'), toggle: !Prefs.hideAnimation(),
         step: function () { Prefs.set('hideAnimation', !Prefs.hideAnimation()); Data.refresh(); }},
+      {label: 'Times', value: followed().map(function (t) { return t.name; }).join(', ') || 'nenhum', opens: true,
+        step: function (d) { if (d >= 0) openTeams(); }},
       {label: 'Ordem dos apps', value: Prefs.get('shelfOrder', 'manual') === 'usage' ? 'Mais usados' : 'Manual',
         step: function () {
           Prefs.set('shelfOrder', Prefs.get('shelfOrder', 'manual') === 'usage' ? 'manual' : 'usage');
@@ -2130,6 +2198,9 @@
       case Z.SEARCH:
         activateSearch();
         return;
+      case Z.TEAMS:
+        toggleTeam();
+        return;
     }
   }
 
@@ -2202,6 +2273,10 @@
       case Z.SEARCH:
         moveSearch(dx, dy);
         break;
+      case Z.TEAMS:
+        if (dy) tmRow = Math.max(0, Math.min(tmList.length - 1, tmRow + dy));
+        else if (dx) { tmLeague = (tmLeague + dx + LEAGUES.length) % LEAGUES.length; loadTeams(); }
+        break;
     }
     updateFocus();
   }
@@ -2219,6 +2294,7 @@
     if (st.zone === Z.KEY) { if (keyAsking) askRemoveKey(false); else closeKey(); return; }
     if (st.zone === Z.ABOUT) { closeAbout(); return; }
     if (st.zone === Z.SEARCH) { closeSearch(); return; }
+    if (st.zone === Z.TEAMS) { closeTeams(); return; }
     if (sheetOpen()) { closeSheets(); return; }
     if (st.zone === Z.DRAWER) { closeDrawer(); return; }
     if (st.zone !== Z.SHELF && shelf.length) { st.zone = Z.SHELF; updateFocus(); return; }
@@ -2229,7 +2305,7 @@
   /** The pointer focuses what it's over (the Magic Remote, or a mouse when previewing). */
   function hover(node, zone, index) {
     node.onmouseover = function () {
-      if (saverOn || (sheetOpen() !== (zone === Z.APPS || zone === Z.SETTINGS || zone === Z.EDIT || zone === Z.LANG || zone === Z.CITY || zone === Z.KEY || zone === Z.ABOUT || zone === Z.SEARCH))) return;
+      if (saverOn || (sheetOpen() !== (zone === Z.APPS || zone === Z.SETTINGS || zone === Z.EDIT || zone === Z.LANG || zone === Z.CITY || zone === Z.KEY || zone === Z.ABOUT || zone === Z.SEARCH || zone === Z.TEAMS))) return;
       if (zone === Z.DRAWER && st.zone !== Z.DRAWER) return;
       if (zone !== Z.DRAWER && st.zone === Z.DRAWER && zone !== Z.SHELF) return;
       if (zone === Z.TOP && index < 3 && !Data.hasKey()) return;   // the tabs are hidden without the picks
@@ -2245,6 +2321,7 @@
       else if (zone === Z.LANG) st.lang = index;
       else if (zone === Z.CITY) st.city = index;
       else if (zone === Z.KEY) st.key = index;
+      else if (zone === Z.TEAMS) tmRow = index;
       else if (zone === Z.SEARCH) {
         srPart = Math.floor(index / 1000);
         if (srPart === 1) srChip = index % 1000;

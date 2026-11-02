@@ -382,3 +382,16 @@ body:not(.night) #news .rates { background: #F5F5F7; }
 /* Drawer shortcuts: 13 keys share the row, so the name may take two smaller lines instead of being cut. */
 .key .sym { top: 24px; }
 .key .label { top: 68px; font-size: 19px; line-height: 22px; white-space: normal; text-align: center; max-height: 44px; }
+
+/* Team picker: the same box as the language picker. */
+#teampick .box {
+  position: absolute;
+  left: 560px;
+  top: 150px;
+  width: 800px;
+  border-radius: 40px;
+  padding: 30px 30px 26px;
+  box-sizing: border-box;
+  background: #141417;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}

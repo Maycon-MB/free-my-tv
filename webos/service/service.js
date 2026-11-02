@@ -536,3 +536,16 @@ service.register('f1', function (message) {
     message.respond({returnValue: true, race: next ? {name: m ? m[1] : name.slice(0, 30), date: next.endDate} : null});
   });
 });
+
+// MARK: - A league's teams, for picking which ones to follow
+
+service.register('teams', function (message) {
+  var league = String((message.payload || {}).league || '');
+  if (!/^[a-z0-9_.]+$/.test(league)) { message.respond({returnValue: false}); return; }
+  getJson(ESPN + league + '/teams', function (d) {
+    var list = (d && d.sports && d.sports[0] && d.sports[0].leagues && d.sports[0].leagues[0].teams) || [];
+    message.respond({returnValue: true, teams: list.map(function (x) {
+      return {id: String(x.team.id).replace(/\D/g, ''), name: String(x.team.shortDisplayName || x.team.displayName).slice(0, 30)};
+    }).sort(function (a, b) { return a.name < b.name ? -1 : 1; })});
+  });
+});
