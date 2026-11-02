@@ -268,9 +268,19 @@
 
   /** Where a pick streams, at a glance: the service's logo (or its name) in the card's corner. */
   function serviceBadge(p, holder) {
-    var badge = el('div', 'badge', holder), logo = BRAND_LOGOS[p.app];
-    if (logo) el('img', '', badge).src = logo;
-    else badge.textContent = p.service;
+    var app = Data.appFor(p.app), badge = el('div', 'badge', holder);
+    if (p.app === 'netflix') { badge.className += ' netflix'; el('img', '', badge).src = BRAND_LOGOS.netflix; }
+    else if (app && app.icon) el('img', '', badge).src = app.icon;   // the same icon as on the TV's own launcher
+    else { badge.className += ' word'; badge.textContent = p.service; }
+  }
+
+  /** Opens a title in its app: Netflix straight on the title's page when Wikidata knows its id, others on their home. */
+  function openTitle(p, app, params) {
+    if (params || app.id !== 'netflix') { launcher(app.id, app.title, params)(); return null; }
+    Data.netflixId(p, function (id) {
+      launcher(app.id, app.title, id ? {contentTarget: 'm=https://www.netflix.com/title/' + id + '&source_type=4'} : null)();
+    });
+    return true;
   }
 
   /** An app's face: its logo on its brand color (or its name, when the icon can't be read). */
@@ -282,7 +292,7 @@
     var word = el('div', 'word', box, app.title);
     if (wordSize) word.style.fontSize = wordSize + 'px';
     var brand = k && BRAND_LOGOS[k[0]];
-    if (brand && !lifted[brand]) lifted[brand] = {src: brand, bg: null, ink: null};   // already transparent
+    if (brand && !lifted[brand]) lifted[brand] = {src: brand, bg: null, ink: null};
     if (brand || app.icon) {
       var img = el('img', '', box), url = brand || app.icon;
       word.style.visibility = 'hidden';
@@ -456,7 +466,7 @@
       var img = el('div', 'img', card);
       // Narrow: the poster (the backdrop cropped without one); the wide card fades its backdrop in over it, loaded then.
       var poster = el('div', 'layer', img);
-      poster.style.backgroundImage = 'url(' + (p.poster ? Data.image(p.poster, 'w342') : Data.image(p.backdrop, 'w780')) + ')';
+      poster.style.backgroundImage = 'url("' + (p.poster ? Data.image(p.poster, 'w342') : Data.image(p.backdrop, 'w780')) + '")';
       el('div', 'layer back', img);
       if (p.service) serviceBadge(p, img);
       el('div', 'name', card, p.title);
@@ -484,7 +494,7 @@
       setClass(n, 'edge', at < 0 || at > 1740);
       if (wide && !n.getAttribute('data-back') && cards[i]) {
         n.setAttribute('data-back', '1');
-        n.querySelector('.back').style.backgroundImage = 'url(' + Data.image(cards[i].backdrop, 'w1280') + ')';
+        n.querySelector('.back').style.backgroundImage = 'url("' + Data.image(cards[i].backdrop, 'w1280') + '")';
       }
       left += w + 40;
     }
@@ -566,6 +576,7 @@
       t.style.height = th + 'px';
       face(shelf[i], t, wordFit(shelf[i].title, tw, 30));
       hover(t, Z.SHELF, i);
+      holdable(t);
     }
     // More apps than fit: a small arrow inside the glass's edge on each side that has more, where no tile reaches
     // even focused (inside the screen's safe area, as on Android).
@@ -683,7 +694,7 @@
     TV.stats(showStats);
   }
 
-  // MARK: - Constellation background, after the owner's portfolio: drawn once at half size, so it costs no frames.
+  // MARK: - Constellation background: drawn once at half size, so it costs no frames.
 
   function drawStars() {
     var canvas = $('stars');
@@ -774,10 +785,11 @@
       var p = srShown[i], item = el('div', 'sitem', grid), app = p.app && Data.appFor(p.app);
       item.style.left = (90 + (i % SEARCH_COLS) * 296) + 'px';
       item.style.top = (Math.floor(i / SEARCH_COLS) * SEARCH_ROW) + 'px';
-      el('div', 'poster', item).style.backgroundImage = 'url(' + Data.image(p.poster, 'w342') + ')';
+      el('div', 'poster', item).style.backgroundImage = 'url("' + Data.image(p.poster, 'w342') + '")';
       el('div', 'stitle', item, p.title);
-      var where = app ? app.title : p.service ? p.service + ' (não instalado)' : 'Sem streaming';
-      el('div', 'smeta' + (app ? ' mine' : ''), item, (p.year ? p.year + ' · ' : '') + where);
+      var where = app ? app.title : p.service ? p.service + ' (não instalado)' : p.paid ? '' : 'Sem streaming';
+      var meta = el('div', 'smeta' + (app ? ' mine' : ''), item, (p.year ? p.year + (where ? ' · ' : '') : '') + where);
+      if (!app && p.paid) el('span', 'paid', meta, p.paid);   // only to rent or buy: said at the line's right end
       hover(item, Z.SEARCH, 2000 + i);
     }
     if (inField) openField('searchpage');
@@ -850,8 +862,7 @@
         : p.title + ' não está em streaming no Brasil.');
       return;
     }
-    toast('Abrindo ' + app.title + ': procure “' + p.title + '” lá dentro.');
-    launcher(app.id, app.title)();
+    if (!openTitle(p, app, null)) toast('Abrindo ' + app.title + ': procure “' + p.title + '” lá dentro.');
   }
 
   function moveSearch(dx, dy) {
@@ -870,21 +881,21 @@
 
   // MARK: - Memory: while another app is in front, the picks' decoded photos go, so that app gets the RAM.
 
-  var released = [];
+  var hiddenPhotos = [];
 
   function releaseImages() {
     var list = document.querySelectorAll('#cards .layer, #saver .photo');
     for (var i = 0; i < list.length; i++) {
       var url = list[i].style.backgroundImage;
       if (!url || url === 'none') continue;
-      released.push([list[i], url]);
+      hiddenPhotos.push([list[i], url]);
       list[i].style.backgroundImage = 'none';
     }
   }
 
   function restoreImages() {
-    for (var i = 0; i < released.length; i++) released[i][0].style.backgroundImage = released[i][1];
-    released = [];
+    for (var i = 0; i < hiddenPhotos.length; i++) hiddenPhotos[i][0].style.backgroundImage = hiddenPhotos[i][1];
+    hiddenPhotos = [];
   }
 
   // MARK: - Drawer
@@ -1557,7 +1568,26 @@
 
   // MARK: - Moving an app on the shelf: hold OK on it, ← → moves it, OK or Back puts it down (saved as the shelf order)
 
-  var HOLD_MS = 600, holdTimer = 0, moving = false;
+  // The press can come as keys (arrows mode) or as the Magic Remote's click (pointer mode), sometimes both at once:
+  // pressStart/pressEnd are idempotent, and a held key's repeats never count as new presses.
+  var HOLD_MS = 600, holdTimer = 0, moving = false, okReleased = true, pressAt = 0;
+
+  function pressStart() {
+    if (Date.now() - pressAt < 150) return;   // the same press, seen as both a key and a click
+    pressAt = Date.now();
+    if (moving) { if (okReleased) stopMoving(); return; }
+    if (st.zone !== Z.SHELF || holdTimer) return;
+    okReleased = false;
+    holdTimer = setTimeout(function () { holdTimer = 0; startMoving(); }, HOLD_MS);
+  }
+
+  function pressEnd() {
+    okReleased = true;
+    if (!holdTimer) return;
+    clearTimeout(holdTimer);
+    holdTimer = 0;
+    activate();   // a short press opens the app
+  }
 
   function startMoving() {
     if (st.zone !== Z.SHELF || !shelf[st.shelf]) return;
@@ -1591,20 +1621,25 @@
     if (moving) {
       if (k === TV.keys.left) moveApp(-1);
       else if (k === TV.keys.right) moveApp(1);
-      else if (k === TV.keys.ok || k === TV.keys.back || k === 27 || k === 8) stopMoving();
+      else if (k === TV.keys.back || k === 27 || k === 8) stopMoving();
+      else if (k === TV.keys.ok && !repeat) pressStart();
       return true;
     }
     if (k !== TV.keys.ok || st.zone !== Z.SHELF) return false;
-    if (!holdTimer && !repeat) holdTimer = setTimeout(function () { holdTimer = 0; startMoving(); }, HOLD_MS);
+    if (!repeat) pressStart();
     return true;
   }
 
   document.addEventListener('keyup', function (e) {
-    if (e.keyCode !== TV.keys.ok || !holdTimer) return;
-    clearTimeout(holdTimer);
-    holdTimer = 0;
-    activate();   // a short press: opens the app, as before
+    if (e.keyCode === TV.keys.ok) pressEnd();
   });
+
+  /** A shelf tile under the pointer: press and hold moves it, a short click opens it. */
+  function holdable(tile) {
+    tile.onclick = null;
+    tile.onmousedown = function () { tile.onmouseover(); pressStart(); };
+    tile.onmouseup = pressEnd;
+  }
 
   // MARK: - Opening things
 
@@ -1655,7 +1690,7 @@
         return;
       case Z.CARDS:
         var target = pickTarget(cards[st.card]);
-        if (target) launcher(target.app.id, target.app.title, target.params)();
+        if (target) openTitle(cards[st.card], target.app, target.params);
         return;
       case Z.SHELF:
         if (shelf[st.shelf]) launcher(shelf[st.shelf].id, shelf[st.shelf].title)();
@@ -1779,7 +1814,8 @@
     if (sheetOpen()) { closeSheets(); return; }
     if (st.zone === Z.DRAWER) { closeDrawer(); return; }
     if (st.zone !== Z.SHELF && shelf.length) { st.zone = Z.SHELF; updateFocus(); return; }
-    TV.back();
+    // Back never leaves: LG's home would take over. The remote's Home button leaves.
+    if (st.shelf > 0) { st.shelf = 0; updateFocus(); }
   }
 
   /** The pointer focuses what it's over (the Magic Remote, or a mouse when previewing). */
@@ -1875,7 +1911,6 @@
     var clock = el('div', 'clock', s);
     el('div', 'time', clock);
     el('div', 'date', clock);
-    // The title and the hint sit apart from the clock, at the bottom right: the clock reads as the time alone.
     var caption = el('div', 'caption', s), title = el('div', 'title', caption);
     var hint = el('div', 'hint', caption);
     var front = a;
@@ -1884,8 +1919,8 @@
       var p = photos.length ? photos[saverIndex++ % photos.length] : null;
       var back = front === a ? b : a;
       if (p) {
-        // w1280, not the original: a 4K photo takes ~33 MB decoded, on a TV with ~150 MB free.
-        back.style.backgroundImage = 'url(' + Data.image(p.backdrop, 'w1280') + ')';
+        // w1280: a 4K photo takes ~33 MB decoded, on a TV with ~150 MB free.
+        back.style.backgroundImage = 'url("' + Data.image(p.backdrop, 'w1280') + '")';
         back.style.webkitTransform = back.style.transform = 'scale(1.0)';
         title.textContent = p.title;
         saverPick = p;

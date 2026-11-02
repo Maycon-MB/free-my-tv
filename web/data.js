@@ -651,11 +651,12 @@ var Data = (function () {
   /** {id: name} for movie and TV genres, fetched once in the TV's language. */
   function genres(done) {
     if (genreNames) { done(genreNames); return; }
-    var names = {}, left = 2;
+    var names = {}, left = 2, failed = false;
     ['movie', 'tv'].forEach(function (kind) {
       tmdb('/genre/' + kind + '/list?language=' + lang(), function (err, o) {
+        failed = failed || !!err;
         for (var i = 0; !err && o && o.genres && i < o.genres.length; i++) names[o.genres[i].id] = o.genres[i].name;
-        if (--left === 0) { genreNames = names; done(names); }
+        if (--left === 0) { if (!failed) genreNames = names; done(names); }   // a failure is asked again next search
       });
     });
   }
@@ -664,6 +665,8 @@ var Data = (function () {
   function streamsOn(p, done) {
     tmdb('/' + p.kind + '/' + p.id + '/watch/providers', function (err, o) {
       var here = !err && o && o.results && o.results[REGION], flat = (here && here.flatrate) || [];
+      var rent = here && here.rent && here.rent.length, buy = here && here.buy && here.buy.length;
+      p.paid = rent && buy ? 'Alugar ou comprar' : rent ? 'Alugar' : buy ? 'Comprar' : '';
       for (var i = 0; i < flat.length; i++) {
         var s = service(flat[i].provider_name, flat[i].provider_id);
         if (!s) continue;
@@ -671,6 +674,25 @@ var Data = (function () {
         if (usable(s[1])) { p.app = s[1]; p.service = s[4]; break; }
       }
       done();
+    });
+  }
+
+  var netflixIds = {};
+
+  /**
+   * The title's Netflix id from Wikidata (P1874), found by its TMDB id (P4947 movies, P4983 shows): done(id or '').
+   * TMDB has no Netflix ids, and this needs no key.
+   */
+  function netflixId(p, done) {
+    var k = keyOf(p);
+    if (netflixIds[k] !== undefined) { done(netflixIds[k]); return; }
+    var q = 'SELECT ?n WHERE { ?i wdt:' + (p.kind === 'tv' ? 'P4983' : 'P4947') + ' "' + Number(p.id) + '"; wdt:P1874 ?n } LIMIT 1';
+    get('https://query.wikidata.org/sparql?format=json&query=' + encodeURIComponent(q), {Accept: 'application/sparql-results+json'},
+        function (err, o) {
+      var b = !err && o && o.results && o.results.bindings && o.results.bindings[0];
+      var id = b && b.n && /^\d+$/.test(b.n.value) ? b.n.value : '';
+      netflixIds[k] = id;
+      done(id);
     });
   }
 
@@ -715,6 +737,7 @@ var Data = (function () {
     appFor: appFor,
     usable: usable,
     search: search,
+    netflixId: netflixId,
     services: services,
     refresh: function () { refreshWeather(); refreshPrices(); refreshRecs(); },
     settingsChanged: function () { pricesAt = 0; refreshPrices(); changed(); },
@@ -734,7 +757,7 @@ var Data = (function () {
     recsError: function () { return recsError; },
     picks: now,
     showcase: all,
-    image: function (path, size) { return path ? 'https://image.tmdb.org/t/p/' + (size || 'w1280') + path : ''; },
+    image: function (path, size) { return path ? 'https://image.tmdb.org/t/p/' + (size || 'w1280') + encodeURI(path) : ''; },
 
     /** Night at the location: from sunset to sunrise (the last forecast; without one, 6:00 and 18:00). */
     isNight: function (at) {

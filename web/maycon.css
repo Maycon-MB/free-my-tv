@@ -308,3 +308,13 @@ html, body, .night #sky .night { background: #0B0B0D; }
 #perf .pfill { height: 6px; border-radius: 3px; background: #3DD68C; }
 #perf .pfill.warn { background: #FFB86B; }
 #perf .pfill.alarm { background: #E5484D; }
+
+/* The service badge is the app's own icon, as on the TV's launcher; the rare one without an icon shows its name. */
+.card .badge { width: 58px; height: 58px; padding: 0; border-radius: 14px; overflow: hidden; background: #0B0B0D; }
+.card .badge img { width: 58px; height: 58px; max-width: none; vertical-align: top; }
+.card .badge.netflix img { width: 30px; height: 46px; margin: 6px 14px; }
+.card .badge.word { width: auto; height: 38px; padding: 0 14px; border-radius: 10px; }
+
+/* Search: "Alugar" / "Comprar" at the right end of the meta line when no installed app streams it. */
+#searchpage .smeta { position: relative; padding-right: 0; }
+#searchpage .smeta .paid { position: absolute; right: 0; top: 0; color: #FFB86B; }
