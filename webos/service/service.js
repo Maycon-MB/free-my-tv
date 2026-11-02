@@ -148,6 +148,65 @@ service.register('stats', function (message) {
   message.respond(out);
 });
 
+// MARK: - Football: next or live match and last result per team, from ESPN's public API (no CORS for the page)
+
+var https = require('https');
+var ESPN = 'https://site.api.espn.com/apis/site/v2/sports/soccer/';
+var footballCache = {};   // url -> {at, data}
+
+function getJson(url, done) {
+  var hit = footballCache[url];
+  if (hit && Date.now() - hit.at < 50000) { done(hit.data); return; }
+  var req = https.get(url, function (res) {
+    var body = '';
+    res.setEncoding('utf8');
+    res.on('data', function (c) { if (body.length < 2e6) body += c; });
+    res.on('end', function () {
+      var data = null;
+      try { data = JSON.parse(body); } catch (e) {}
+      if (data) footballCache[url] = {at: Date.now(), data: data};
+      done(data);
+    });
+  });
+  req.on('error', function () { done(null); });
+  req.setTimeout(8000, function () { req.abort(); });
+}
+
+/** A match as the page needs it: who, when, the state and the score (only digits leave here). */
+function match(e) {
+  var c = e && e.competitions && e.competitions[0];
+  if (!c) return null;
+  var side = {};
+  (c.competitors || []).forEach(function (x) {
+    var score = x.score && typeof x.score === 'object' ? x.score.displayValue : x.score;
+    side[x.homeAway] = {abbr: String((x.team && x.team.abbreviation) || '').slice(0, 4),
+      id: String((x.team && x.team.id) || '').replace(/\D/g, ''), score: /^\d+$/.test(String(score)) ? +score : null};
+  });
+  var s = c.status || {}, type = s.type || {};
+  return {date: e.date, state: type.state, done: !!type.completed, clock: String(s.displayClock || '').slice(0, 8),
+    league: String((e.league && e.league.abbreviation) || (e.season && e.season.slug) || '').slice(0, 30),
+    home: side.home || null, away: side.away || null};
+}
+
+service.register('football', function (message) {
+  var teams = ((message.payload || {}).teams || []).slice(0, 6), out = [], left = teams.length;
+  if (!left) { message.respond({returnValue: true, teams: []}); return; }
+  teams.forEach(function (t, i) {
+    var league = /^[a-z0-9_.]+$/.test(t.league) ? t.league : 'bra.1', id = String(t.id).replace(/\D/g, '');
+    getJson(ESPN + league + '/teams/' + id, function (team) {
+      getJson(ESPN + league + '/teams/' + id + '/schedule', function (sched) {
+        var info = team && team.team, played = ((sched && sched.events) || []).map(match).filter(function (m) {
+          return m && m.done;
+        }).sort(function (a, b) { return a.date < b.date ? 1 : -1; });
+        out[i] = {id: id, abbr: info ? String(info.abbreviation || '').slice(0, 4) : '',
+          name: info ? String(info.shortDisplayName || info.displayName || '').slice(0, 30) : '',
+          next: info && info.nextEvent ? match(info.nextEvent[0]) : null, last: played[0] || null};
+        if (--left === 0) message.respond({returnValue: true, teams: out});
+      });
+    });
+  });
+});
+
 service.register('ssap', function (message) {
   var p = message.payload || {};
   // Only the app list, the one call the page makes: nothing else goes to the TV's API, nor gets its client key.

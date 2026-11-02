@@ -524,6 +524,12 @@ var TV = (function () {
       luna('luna://' + self + '.service/stats', {}, done);
     },
 
+    /** Matches for teams [{league, id}] from the app's service: done({teams: [...]}) or null (not on LG). */
+    football: function (teams, done) {
+      if (!webos) { done(null); return; }
+      luna('luna://' + self + '.service/football', {teams: teams}, done);
+    },
+
     /** Installed apps, as the TV's launcher lists them: [{id, title, icon, color}]. */
     apps: function (done) {
       if (samsung) { samsungApps(done); return; }

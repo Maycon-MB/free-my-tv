@@ -695,6 +695,56 @@
     TV.stats(showStats);
   }
 
+  // MARK: - Football: the followed teams' live, next or last match beside the tabs
+
+  var TEAMS = [{league: 'bra.1', id: '819'}];   // Flamengo; ESPN ids, league slug as in its API
+  var FOOTBALL_EVERY = 5 * 60000, FOOTBALL_LIVE_EVERY = 60000, footballTimer = 0;
+  var WEEKDAYS = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
+
+  function teamLogo(id) {
+    return 'https://a.espncdn.com/combiner/i?img=/i/teamlogos/soccer/500/' + id + '.png&w=56&h=56';
+  }
+
+  function two(n) { return (n < 10 ? '0' : '') + n; }
+
+  /** The match worth showing: live first, else one starting within 3 days, else a result from the last 2 days. */
+  function shownMatch(t) {
+    var now = Date.now(), next = t.next, last = t.last;
+    if (next && next.state === 'in') return next;
+    if (next && new Date(next.date).getTime() - now < 3 * 86400000) return next;
+    if (last && now - new Date(last.date).getTime() < 2 * 86400000) return last;
+    return next || last;
+  }
+
+  function showFootball(res) {
+    var box = $('football'), live = false;
+    if (!box) return;
+    box.innerHTML = '';
+    var teams = (res && res.teams) || [];
+    for (var i = 0; i < teams.length && i < 2; i++) {
+      var m = teams[i] && shownMatch(teams[i]);
+      if (!m || !m.home || !m.away) continue;
+      var chip = el('div', 'match' + (m.state === 'in' ? ' live' : ''), box);
+      live = live || m.state === 'in';
+      el('img', '', chip).src = teamLogo(m.home.id);
+      var score = m.state === 'pre' ? ' × ' : ' ' + m.home.score + ' × ' + m.away.score + ' ';
+      el('span', 'teams', chip, m.home.abbr + score + m.away.abbr);
+      el('img', '', chip).src = teamLogo(m.away.id);
+      var d = new Date(m.date), when;
+      if (m.state === 'in') when = '● ' + m.clock;
+      else if (m.state === 'post') when = 'FIM · ' + two(d.getDate()) + '/' + two(d.getMonth() + 1);
+      else when = WEEKDAYS[d.getDay()] + ' ' + two(d.getDate()) + '/' + two(d.getMonth() + 1) + ' ' + two(d.getHours()) + ':' + two(d.getMinutes());
+      el('span', 'when', chip, when);
+    }
+    clearTimeout(footballTimer);
+    footballTimer = setTimeout(pollFootball, live ? FOOTBALL_LIVE_EVERY : FOOTBALL_EVERY);
+  }
+
+  function pollFootball() {
+    if (document.hidden) { footballTimer = setTimeout(pollFootball, FOOTBALL_EVERY); return; }
+    TV.football(TEAMS, showFootball);
+  }
+
   // MARK: - Constellation background: drawn once at half size, so it costs no frames.
 
   function drawStars() {
@@ -2153,6 +2203,7 @@
   applyDim();
   tickClock();
   drawStars();
+  pollFootball();
   pollStats();
   setInterval(pollStats, STATS_EVERY);
   loadApps(function () {
@@ -2173,5 +2224,5 @@
 
   // For the browser preview and tests.
   window.FreeMyTV = {state: st, move: move, activate: activate, back: back, showSaver: showSaver, hideSaver: hideSaver, toast: toast,
-    showAmbient: showAmbient, hideAmbient: hideAmbient, applyDim: applyDim};
+    showAmbient: showAmbient, hideAmbient: hideAmbient, applyDim: applyDim, showFootball: showFootball};
 })();

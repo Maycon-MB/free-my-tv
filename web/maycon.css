@@ -318,3 +318,29 @@ html, body, .night #sky .night { background: #0B0B0D; }
 /* Search: "Alugar" / "Comprar" at the right end of the meta line when no installed app streams it. */
 #searchpage .smeta { position: relative; padding-right: 0; }
 #searchpage .smeta .paid { position: absolute; right: 0; top: 0; color: #FFB86B; }
+
+/* Football: the followed team's match beside the tabs; live gets the red accent. */
+#football { position: absolute; left: 640px; top: 158px; height: 68px; white-space: nowrap; }
+#football .match {
+  display: inline-block;
+  height: 64px;
+  margin-right: 14px;
+  padding: 0 22px 0 16px;
+  border: 1.5px solid rgba(255, 255, 255, 0.12);
+  border-radius: 32px;
+  background: #141417;
+  line-height: 64px;
+  color: #F2F2F3;
+}
+#football img { width: 36px; height: 36px; vertical-align: -10px; margin: 0 8px; }
+#football .teams { font-size: 26px; font-weight: 800; letter-spacing: 0.02em; }
+#football .when {
+  margin-left: 14px;
+  font-family: 'Mono', monospace;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #8C8C96;
+}
+#football .live { border-color: #E5484D; }
+#football .live .when { color: #FF7A7F; }
