@@ -859,12 +859,38 @@
 
   // MARK: - Constellation background: drawn once at half size, so it costs no frames.
 
+  // Optional drift (Home Settings, off by default): 10 frames a second, only while the home screen shows and rests.
+  var STAR_FPS = 10, stars = [], starTimer = 0;
+
   function drawStars() {
     var canvas = $('stars');
     if (!canvas || !canvas.getContext) return;
-    var g = canvas.getContext('2d'), w = canvas.width, h = canvas.height, reach = 110, pts = [];
+    var w = canvas.width, h = canvas.height;
+    if (!stars.length) {
+      for (var n = 0; n < 46; n++) {
+        stars.push({x: Math.random() * w, y: Math.random() * h, r: Math.random() * 0.7 + 0.6,
+          vx: (Math.random() - 0.5) * 0.5, vy: (Math.random() - 0.5) * 0.5});
+      }
+    }
+    paintStars(canvas);
+    clearInterval(starTimer);
+    if (Prefs.get('starsMove', false)) starTimer = setInterval(stepStars, 1000 / STAR_FPS);
+  }
+
+  function stepStars() {
+    if (document.hidden || saverOn || ambientOn || sheetOpen()) return;
+    var canvas = $('stars'), w = canvas.width, h = canvas.height;
+    for (var i = 0; i < stars.length; i++) {
+      var p = stars[i];
+      p.x = (p.x + p.vx + w) % w;
+      p.y = (p.y + p.vy + h) % h;
+    }
+    paintStars(canvas);
+  }
+
+  function paintStars(canvas) {
+    var g = canvas.getContext('2d'), w = canvas.width, h = canvas.height, reach = 110, pts = stars, i;
     var rgb = ACCENT_RGB[Prefs.get('accent', 'red')] || ACCENT_RGB.red;
-    for (var i = 0; i < 46; i++) pts.push({x: Math.random() * w, y: Math.random() * h, r: Math.random() * 0.7 + 0.6});
     g.clearRect(0, 0, w, h);
     g.lineWidth = 0.6;
     for (i = 0; i < pts.length; i++) {
@@ -888,6 +914,18 @@
       g.arc(pts[i].x, pts[i].y, pts[i].r, 0, 6.283);
       g.fill();
     }
+  }
+
+  // MARK: - Rotating highlight (Home Settings, on by default)
+
+  var ROTATE_EVERY = 8000;
+
+  function rotatePick() {
+    if (!Prefs.get('rotate', true) || document.hidden || saverOn || ambientOn || sheetOpen()) return;
+    if (st.zone === Z.CARDS || st.zone === Z.DRAWER || cards.length < 2 || Date.now() - idleAt < ROTATE_EVERY) return;
+    st.card = (st.card + 1) % cards.length;
+    updateFocus();
+    backdrop(Data.image(cards[st.card].backdrop, 'w300'));
   }
 
   // MARK: - Search: a title by name, filtered by kind, genre and the TV's own apps; OK opens the app it streams on
@@ -1255,6 +1293,10 @@
         step: function (d) { Prefs.set('cards', 3 + (Prefs.cards() - 3 + (d || 1) + 4) % 4); renderCards(); }},
       {label: tr('Cartoons and anime'), toggle: !Prefs.hideAnimation(),
         step: function () { Prefs.set('hideAnimation', !Prefs.hideAnimation()); Data.refresh(); }},
+      {label: 'Destaque girando', toggle: Prefs.get('rotate', true),
+        step: function () { Prefs.set('rotate', !Prefs.get('rotate', true)); }},
+      {label: 'Fundo animado', toggle: Prefs.get('starsMove', false),
+        step: function () { Prefs.set('starsMove', !Prefs.get('starsMove', false)); drawStars(); }},
       {label: tr('Watch from the screensaver'), toggle: Prefs.saverWatch(),
         step: function () { Prefs.set('saverWatch', !Prefs.saverWatch()); }},
       {label: tr('Weather widget'), toggle: Prefs.weather(),
@@ -2320,6 +2362,7 @@
   Prefs.onSave(backupSoon);
   pollFootball();
   pollStats();
+  setInterval(rotatePick, ROTATE_EVERY);
   setInterval(pollStats, STATS_EVERY);
   loadApps(function () {
     renderAll();
