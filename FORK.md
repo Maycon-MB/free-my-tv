@@ -18,6 +18,11 @@ webOS 25 com 1,2 GB de RAM. O README e o CLAUDE.md do original continuam valendo
 | Jogo do Flamengo ao lado das abas (API pública da ESPN pelo serviço) e aviso de gol por cima de outros apps | `webos/service/service.js`, `web/home.js` |
 | Gaveta: apagar tela, mudo e timer que desliga a TV (API de controle remoto; a TV pede Permitir uma vez) | `webos/service/service.js`, `web/tv.js`, `web/home.js` |
 | Destaque do Explorar girando (ligado) e constelação animada (desligada), nas Configurações da Home | `web/home.js` |
+| Developer Mode renovado pela própria TV, uma vez por dia em segundo plano; dias restantes no painel | `webos/service/service.js`, `web/home.js` |
+| Linha discreta no topo: manchetes do ge e do g1 (RSS) e dólar/euro (AwesomeAPI) | `webos/service/service.js`, `web/home.js` |
+| Próximo GP de F1 ao lado do jogo; lembrete 10 min antes do jogo, por cima de outros apps | `webos/service/service.js`, `web/home.js` |
+| Pesquisa digitada pelo celular: página na rede de casa (porta 8770) com código de 4 dígitos, só com a pesquisa aberta | `webos/service/service.js`, `web/home.js` |
+| Gaveta: testar a velocidade da internet (10 MB da Cloudflare) | `webos/service/service.js`, `web/home.js` |
 | Explorar com até 6 títulos, o que passa no Brasil primeiro, selo com o ícone do app, Claro tv+ | `web/data.js`, `web/home.js` |
 | Painel de desempenho na gaveta (CPU, RAM, swap, rede lidos de `/proc`); no topo só alerta | `webos/service/service.js`, `web/tv.js`, `web/home.js` |
 | Voltar não sai para a home da LG; fotos da proteção de tela em 1280 px e liberadas ao sair | `web/home.js` |
@@ -54,6 +59,10 @@ O token nunca entra no repositório.
 
 - Abrir no título em Prime, Disney+, Max, Apple TV e Globoplay (formato do link inferido).
 - Timer, apagar tela, mudo e aviso de gol (permissões novas da API de controle remoto).
+- Renovação do Developer Mode pela TV (o serviço precisa ler `/var/luna/preferences/devmode_enabled`); se der
+  certo, a tarefa do notebook vira só reserva.
+- Página do celular (o serviço abrir a porta 8770 na TV), manchetes, F1 e lembrete do jogo.
+- Modo cinema (troca do modo de imagem pelo alerta da TV) ainda não feito: depende de teste.
 - O app na lista de Entradas e a TV ligando nele com "última entrada", inclusive depois de tirar da tomada.
 
 ## Atualizar com o original
