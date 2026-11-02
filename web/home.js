@@ -276,6 +276,7 @@
 
   /** Opens a title in its app, on the title's page when Wikidata knows its id there (else on the app's home). */
   function openTitle(p, app, params) {
+    rememberTitle(p);
     if (params || !p.app) { launcher(app.id, app.title, params)(); return null; }
     Data.titleLink(p, p.app, function (target) {
       launcher(app.id, app.title, target ? {contentTarget: target} : null)();
@@ -342,7 +343,7 @@
       }
       for (var r = 0; r < apps.length; r++) if (out.indexOf(apps[r]) < 0) out.push(apps[r]);
     }
-    shelf = out;
+    shelf = Prefs.get('shelfOrder', 'manual') === 'usage' ? byUsage(out) : out;
     others = apps.filter(function (x) { return shelf.indexOf(x) < 0; });
   }
 
@@ -1051,6 +1052,10 @@
   function openSearch() {
     st.zone = Z.SEARCH;
     srPart = 0;
+    srAll = Prefs.get('recent', []);   // before typing: the titles opened lately, to pick up where it stopped
+    srQuery = '';
+    srFilter();
+    srStatus = srAll.length ? 'Abertos recentemente · digite para pesquisar' : '';
     if (!Data.hasKey()) srStatus = 'A pesquisa usa a chave do TMDB: configure em Configurações da Home.';
     renderSearch();
     setClass($('searchpage'), 'open', true);
@@ -1333,6 +1338,12 @@
         step: function (d) { Prefs.set('cards', 3 + (Prefs.cards() - 3 + (d || 1) + 4) % 4); renderCards(); }},
       {label: tr('Cartoons and anime'), toggle: !Prefs.hideAnimation(),
         step: function () { Prefs.set('hideAnimation', !Prefs.hideAnimation()); Data.refresh(); }},
+      {label: 'Ordem dos apps', value: Prefs.get('shelfOrder', 'manual') === 'usage' ? 'Mais usados' : 'Manual',
+        step: function () {
+          Prefs.set('shelfOrder', Prefs.get('shelfOrder', 'manual') === 'usage' ? 'manual' : 'usage');
+          pickShelf();
+          renderShelf();
+        }},
       {label: 'Destaque girando', toggle: Prefs.get('rotate', true),
         step: function () { Prefs.set('rotate', !Prefs.get('rotate', true)); }},
       {label: 'Fundo animado', toggle: Prefs.get('starsMove', false),
@@ -1842,6 +1853,7 @@
 
   function startMoving() {
     if (st.zone !== Z.SHELF || !shelf[st.shelf]) return;
+    if (Prefs.get('shelfOrder', 'manual') === 'usage') { Prefs.set('shelfOrder', 'manual'); toast('Ordem dos apps: manual.'); }
     moving = true;
     setClass($('tiles').children[st.shelf], 'moving', true);
     $('tilename').textContent = '← mover →';
@@ -1937,8 +1949,35 @@
     return function () {
       TV.launch(id, params || null, function (ok) {
         if (!ok) toast(trf("Couldn't open {app}.", {app: name || id}));
+        else countLaunch(id);
       });
     };
+  }
+
+  // MARK: - Most used apps and recently opened titles
+
+  var RECENT_MAX = 12;
+
+  function countLaunch(id) {
+    var usage = Prefs.get('usage', {}), copy = {};
+    for (var k in usage) if (usage.hasOwnProperty(k)) copy[k] = usage[k];
+    copy[id] = (copy[id] || 0) + 1;
+    Prefs.set('usage', copy);
+  }
+
+  /** Stable sort by launches, most first (Home Settings, Order of apps: Most used). */
+  function byUsage(list) {
+    var usage = Prefs.get('usage', {});
+    return list.map(function (a, i) { return [a, i]; }).sort(function (x, y) {
+      return ((usage[y[0].id] || 0) - (usage[x[0].id] || 0)) || x[1] - y[1];
+    }).map(function (x) { return x[0]; });
+  }
+
+  function rememberTitle(p) {
+    var item = {id: p.id, kind: p.kind, title: p.title, poster: p.poster, app: p.app, year: p.year || '', genres: p.genres || []};
+    var list = Prefs.get('recent', []).filter(function (r) { return !(r.id === p.id && r.kind === p.kind); });
+    list.unshift(item);
+    Prefs.set('recent', list.slice(0, RECENT_MAX));
   }
 
   function tvSettings() {
