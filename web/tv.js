@@ -546,7 +546,9 @@ var TV = (function () {
     /** The service's sleep timer: off after minutes (0 cancels); done({at}) with the time it will turn off. */
     sleep: function (minutes, done) {
       if (!webos) { if (done) done(null); return; }
-      luna('luna://' + self + '.service/sleep', {minutes: minutes}, done || null);
+      var key = null;
+      try { key = localStorage.getItem(SSAP_KEY); } catch (e) {}
+      luna('luna://' + self + '.service/sleep', {minutes: minutes, clientKey: key}, done || null);
     },
 
     /** Goal toasts on any app for these teams while they play. */

@@ -252,10 +252,16 @@ service.register('ssap', function (message) {
 
 var lastKey = null, keepAlive = null, sleepTimer = null, sleepAt = 0, watchTimer = null, watched = [], scores = {};
 
-function hold(on) {
-  if (on && !keepAlive && service.activityManager) {
-    service.activityManager.create('keepAlive', function (activity) { keepAlive = activity; });
-  } else if (!on && keepAlive && !sleepTimer && !watchTimer) {
+var keepAsking = false;
+
+/** Keeps the service alive exactly while a timer, a reminder or a match watch is pending. */
+function hold() {
+  var need = !!(sleepTimer || watchTimer || reminderTimer);
+  if (!service.activityManager) return;
+  if (need && !keepAlive && !keepAsking) {
+    keepAsking = true;
+    service.activityManager.create('keepAlive', function (activity) { keepAsking = false; keepAlive = activity; hold(); });
+  } else if (!need && keepAlive) {
     service.activityManager.complete(keepAlive, function () {});
     keepAlive = null;
   }
@@ -263,18 +269,18 @@ function hold(on) {
 
 service.register('sleep', function (message) {
   var minutes = Number((message.payload || {}).minutes) || 0;
+  if ((message.payload || {}).clientKey) lastKey = message.payload.clientKey;
   if (sleepTimer) { clearTimeout(sleepTimer); sleepTimer = null; sleepAt = 0; }
   if (minutes > 0 && minutes <= 240 && lastKey) {
     sleepAt = Date.now() + minutes * 60000;
     sleepTimer = setTimeout(function () {
       sleepTimer = null;
       sleepAt = 0;
-      call('system/turnOff', lastKey, {}, function () { hold(false); });
+      call('system/turnOff', lastKey, {}, function () {});
+      hold();
     }, minutes * 60000);
-    hold(true);
-  } else {
-    hold(false);
   }
+  hold();
   message.respond({returnValue: true, at: sleepAt});
 });
 
@@ -289,6 +295,7 @@ function checkGoals() {
   watched.forEach(function (t) {
     getJson(ESPN + t.league + '/teams/' + t.id, function (team) {
       var e = team && team.team && team.team.nextEvent && team.team.nextEvent[0], m = match(e);
+      if (m && m.state === 'pre' && Date.parse(m.date) - Date.now() < 3 * 3600000) live = true;   // about to start
       if (m && m.state === 'in' && m.home && m.away) {
         live = true;
         var key = m.date + m.home.id, score = m.home.score + ':' + m.away.score;
@@ -304,14 +311,14 @@ function checkGoals() {
 
 function stopWatching() {
   if (watchTimer) { clearInterval(watchTimer); watchTimer = null; }
-  hold(false);
+  hold();
 }
 
 service.register('watchGoals', function (message) {
   var p = message.payload || {};
   if (p.clientKey) lastKey = p.clientKey;
   watched = (p.teams || []).slice(0, 6).filter(function (t) { return /^[a-z0-9_.]+$/.test(t.league) && /^\d+$/.test(t.id); });
-  if (watched.length && !watchTimer) { watchTimer = setInterval(checkGoals, 60000); hold(true); checkGoals(); }
+  if (watched.length && !watchTimer) { watchTimer = setInterval(checkGoals, 60000); hold(); checkGoals(); }
   if (!watched.length) stopWatching();
   message.respond({returnValue: true});
 });
@@ -352,18 +359,18 @@ service.register('renewDevMode', function (message) {
     message.respond({returnValue: false, errorText: 'no token', hours: state.hours || -1});
     return;
   }
-  var due = !state.at || Date.now() - state.at > RENEW_EVERY || Date.now() < state.at;
+  var due = !state.at || Date.now() - state.at > RENEW_EVERY || Date.now() < state.at, renewed = false;
   function check() {
     lgeCall('CheckDevModeSession.dev', token, function (res) {
       var hours = hoursLeft(res && res.errorMsg);
       if (hours >= 0) state.hours = hours;
       fs.writeFile(RENEW_STATE, JSON.stringify(state), function () {});
-      message.respond({returnValue: true, renewed: !!state.renewedNow, hours: state.hours === undefined ? -1 : state.hours});
+      message.respond({returnValue: true, renewed: renewed, hours: state.hours === undefined ? -1 : state.hours});
     });
   }
   if (!due) { check(); return; }
   lgeCall('ResetDevModeSession.dev', token, function (res) {
-    if (res && res.result === 'success') { state.at = Date.now(); state.renewedNow = true; }
+    if (res && res.result === 'success') { state.at = Date.now(); renewed = true; }
     check();
   });
 });
@@ -450,8 +457,7 @@ service.register('remind', function (message) {
     // Only within 3 hours: the activity that keeps the service alive shouldn't last for days.
     if (at > Date.now() && at - Date.now() < 3 * 3600000 && text) {
       reminderAt = at;
-      reminderTimer = setTimeout(function () { reminderTimer = null; toast(text); hold(false); }, at - Date.now());
-      hold(true);
+      reminderTimer = setTimeout(function () { reminderTimer = null; toast(text); hold(); }, at - Date.now());
     }
   }
   message.respond({returnValue: true, at: reminderAt});
@@ -461,7 +467,7 @@ service.register('remind', function (message) {
 // 4-digit code shown on the TV. Nothing else is served, and it stops when the search closes.
 
 var http = require('http'), os = require('os');
-var phone = {server: null, code: '', text: '', port: 8770};
+var phone = {server: null, code: '', text: '', port: 8770, fails: 0};
 
 function lanAddress() {
   var nets = os.networkInterfaces();
@@ -484,14 +490,16 @@ var PHONE_PAGE = '<!doctype html><meta name=viewport content="width=device-width
 function startPhone() {
   phone.code = String(1000 + Math.floor(Math.random() * 9000));
   phone.text = '';
+  phone.fails = 0;
   if (phone.server) return;
   phone.server = http.createServer(function (req, res) {
     if (req.method === 'POST') {
       var body = '';
       req.on('data', function (c) { if (body.length < 2000) body += c; });
       req.on('end', function () {
-        var form = require('querystring').parse(body), ok = form.code === phone.code && form.q;
+        var form = require('querystring').parse(body), ok = phone.fails < 5 && form.code === phone.code && form.q;
         if (ok) phone.text = String(form.q).slice(0, 100);
+        else phone.fails++;   // after 5 wrong codes nothing more is taken until the search opens again
         res.writeHead(200, {'Content-Type': 'text/html; charset=utf-8'});
         res.end(PHONE_PAGE.replace('<h2>', ok ? '<p>Enviado. Pode digitar outro.</p><h2>' : '<p>Código errado.</p><h2>'));
       });

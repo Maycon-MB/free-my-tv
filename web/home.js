@@ -275,10 +275,16 @@
   }
 
   /** Opens a title in its app, on the title's page when Wikidata knows its id there (else on the app's home). */
+  var opening = 0;
+
   function openTitle(p, app, params) {
     rememberTitle(p);
     if (params || !p.app) { launcher(app.id, app.title, params)(); return null; }
+    if (Date.now() - opening < 10000) return true;
+    opening = Date.now();
+    toast('Abrindo ' + app.title + '…');
     Data.titleLink(p, p.app, function (target) {
+      opening = 0;
       launcher(app.id, app.title, target ? {contentTarget: target} : null)();
       if (!target) toast('Abrindo ' + app.title + ': procure “' + p.title + '” lá dentro.');
     });
@@ -741,6 +747,7 @@
   }
 
   function profileChanged() {
+    deleteArmed = false;
     applyAccent();
     checkNight();
     pickShelf();
@@ -857,7 +864,8 @@
     // A control call first, so the service has the TV's key and the person has allowed it.
     TV.control('audio/getStatus', {}, function () {
       TV.sleep(minutes, function (res) {
-        toast(!res ? 'Não deu para ligar o timer.' : minutes ? 'A TV desliga em ' + minutes + ' min.' : 'Timer desligado.');
+        toast(!res || (minutes && !res.at) ? 'Não deu para ligar o timer (permita o Free My TV na TV).'
+          : minutes ? 'A TV desliga em ' + minutes + ' min.' : 'Timer desligado.');
       });
     });
     renderDrawer();
@@ -979,7 +987,7 @@
     if (!box) return;
     box.innerHTML = '';
     var teams = (res && res.teams) || [];
-    for (var i = 0; i < teams.length && i < 2; i++) {
+    for (var i = 0; i < teams.length && i < MAX_TEAMS; i++) {
       var m = teams[i] && shownMatch(teams[i]);
       if (!m || !m.home || !m.away) continue;
       var chip = el('div', 'match' + (m.state === 'in' ? ' live' : ''), box);
@@ -996,7 +1004,12 @@
     }
     clearTimeout(footballTimer);
     footballTimer = setTimeout(pollFootball, live ? FOOTBALL_LIVE_EVERY : FOOTBALL_EVERY);
-    if (live) TV.watchGoals(followed());   // the service keeps watching while another app is in front
+    // The service keeps watching while another app is in front: from 3 h before kickoff until the match ends.
+    for (var w = 0; w < teams.length && !live; w++) {
+      var nx = teams[w] && teams[w].next;
+      if (nx && nx.state === 'pre' && new Date(nx.date).getTime() - Date.now() < 3 * 3600000) live = true;
+    }
+    if (live) TV.watchGoals(followed());
     var soon = teams[0] && teams[0].next;
     if (soon && soon.state === 'pre' && soon.home && soon.away) {
       TV.service('remind', {date: soon.date, text: soon.home.abbr + ' × ' + soon.away.abbr + ' começa em 10 minutos'});
@@ -1186,6 +1199,9 @@
     srPart = 0;
     srAll = Prefs.get('recent', []);   // before typing: the titles opened lately, to pick up where it stopped
     srQuery = '';
+    srKind = 0;
+    srMine = false;
+    srGenre = 0;
     srFilter();
     srStatus = srAll.length ? 'Abertos recentemente · digite para pesquisar' : '';
     if (!Data.hasKey()) srStatus = 'A pesquisa usa a chave do TMDB: configure em Configurações da Home.';
@@ -1244,6 +1260,7 @@
     srShown = [];
     renderSearch();
     Data.search(q, function (err, found) {
+      if (st.zone !== Z.SEARCH) return;
       srAll = found || [];
       srGenre = 0;
       srItem = 0;
@@ -2044,7 +2061,10 @@
   }
 
   /** True when the key was handled here: OK on the shelf waits for its release (a hold starts moving). */
+  var okDown = false;
+
   function shelfKeys(k, repeat) {
+    if (k === TV.keys.ok) { repeat = repeat || okDown; okDown = true; }
     if (moving) {
       if (k === TV.keys.left) moveApp(-1);
       else if (k === TV.keys.right) moveApp(1);
@@ -2058,7 +2078,9 @@
   }
 
   document.addEventListener('keyup', function (e) {
-    if (e.keyCode === TV.keys.ok) pressEnd();
+    if (e.keyCode !== TV.keys.ok) return;
+    okDown = false;
+    pressEnd();
   });
 
   /** Where holding OK does something: the shelf (move the app), a pick or a search result (its trailer). */
@@ -2087,8 +2109,9 @@
   function holdable(tile) {
     tile.onclick = null;
     tile.onmousedown = function () { tile.onmouseover(); pressStart(); };
-    tile.onmouseup = pressEnd;
   }
+
+  document.addEventListener('mouseup', pressEnd);   // released off the tile (a shaky pointer) still ends the press
 
   // MARK: - Opening things
 
@@ -2305,7 +2328,7 @@
   /** The pointer focuses what it's over (the Magic Remote, or a mouse when previewing). */
   function hover(node, zone, index) {
     node.onmouseover = function () {
-      if (saverOn || (sheetOpen() !== (zone === Z.APPS || zone === Z.SETTINGS || zone === Z.EDIT || zone === Z.LANG || zone === Z.CITY || zone === Z.KEY || zone === Z.ABOUT || zone === Z.SEARCH || zone === Z.TEAMS))) return;
+      if (moving || saverOn || (sheetOpen() !== (zone === Z.APPS || zone === Z.SETTINGS || zone === Z.EDIT || zone === Z.LANG || zone === Z.CITY || zone === Z.KEY || zone === Z.ABOUT || zone === Z.SEARCH || zone === Z.TEAMS))) return;
       if (zone === Z.DRAWER && st.zone !== Z.DRAWER) return;
       if (zone !== Z.DRAWER && st.zone === Z.DRAWER && zone !== Z.SHELF) return;
       if (zone === Z.TOP && index < 3 && !Data.hasKey()) return;   // the tabs are hidden without the picks
@@ -2595,9 +2618,10 @@
   document.addEventListener('webOSRelaunch', reopened);   // LG: opened again while running
   window.addEventListener('appcontrol', reopened);        // Samsung: the same
   document.addEventListener('visibilitychange', function () {
-    if (document.hidden) { hideSaver(); hideAmbient(); releaseImages(); return; }
+    if (document.hidden) { hideSaver(); hideAmbient(); releaseImages(); if (st.zone === Z.SEARCH) closeSearch(); return; }
     idleAt = Date.now();
     restoreImages();
+    okDown = false;   // a key held while another app took over never sends its keyup here
     loadApps(function () { renderShelf(); renderDrawer(); updateFocus(); Data.refresh(); });
   });
 
