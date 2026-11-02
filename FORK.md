@@ -31,7 +31,7 @@ python webos/build.py
 python webos/install.py <IP>   # 1ª vez pede a senha do Developer Mode, digitada no terminal
 ```
 
-`web/accents.css` é gerado a partir das cores de `web/maycon.css` (vermelho trocado por azul, verde, roxo, laranja
+`web/accents.css` é gerado por `python tools/make_accents.py` a partir das cores de `web/maycon.css` (vermelho trocado por azul, verde, roxo, laranja
 e amarelo); ao mudar uma cor de destaque em `maycon.css`, gere de novo.
 
 Fica fora do git e precisa existir na máquina: `config.properties` (cidade, chave do TMDB),
