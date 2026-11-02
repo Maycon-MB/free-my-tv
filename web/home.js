@@ -836,18 +836,9 @@
   function sleepLabel() { return SLEEP_STEPS[sleepStep] ? 'Timer ' + SLEEP_STEPS[sleepStep] + ' min' : 'Timer'; }
 
   function screenOff() {
-    toast('Tela apagada. Aperte qualquer botão para acender.');
+    toast('Tela apagada, som ligado (bom para música). Aperte qualquer botão para acender.');
     TV.control('com.webos.service.tvpower/power/turnOffScreen', {}, function (res) {
       if (!res) toast('A TV não deixou apagar a tela (permita o Free My TV quando ela perguntar).');
-    });
-  }
-
-  function toggleMute() {
-    TV.control('audio/getStatus', {}, function (s) {
-      var mute = !(s && s.mute);
-      TV.control('audio/setMute', {mute: mute}, function (res) {
-        toast(res ? (mute ? 'Som mudo' : 'Som ligado') : 'A TV não deixou mudar o som.');
-      });
     });
   }
 
@@ -1375,8 +1366,7 @@
     }
     drawerInputs = drawerItems.length;
     drawerItems.push({label: tr('All Apps'), symbol: 'apps', run: openApps});
-    drawerItems.push({label: 'Apagar', symbol: 'tv', run: screenOff});
-    drawerItems.push({label: 'Mudo', symbol: 'speaker', run: toggleMute});
+    drawerItems.push({label: 'Só o som', symbol: 'speaker', run: screenOff});
     drawerItems.push({label: sleepLabel(), symbol: 'bedtime', run: cycleSleep});
     drawerItems.push({label: 'Internet', symbol: 'wifi', run: speedTest});
     drawerItems.push({label: tr('Home Settings'), symbol: 'settings', run: openSettings});

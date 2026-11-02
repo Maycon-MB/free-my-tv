@@ -13,7 +13,7 @@ var service = new Service(require('./package.json').name);
 var PERMISSIONS = ['READ_INSTALLED_APPS', 'READ_RUNNING_APPS', 'READ_INPUT_DEVICE_LIST', 'CONTROL_INPUT_TV',
   'CONTROL_AUDIO', 'CONTROL_POWER', 'WRITE_NOTIFICATION_TOAST'];
 var ALLOWED = ['com.webos.applicationManager/listLaunchPoints', 'com.webos.applicationManager/getForegroundAppInfo',
-  'tv/getExternalInputList', 'tv/switchInput', 'audio/getStatus', 'audio/setMute', 'system/turnOff',
+  'tv/getExternalInputList', 'tv/switchInput', 'audio/getStatus', 'system/turnOff',
   'com.webos.service.tvpower/power/turnOffScreen', 'com.webos.service.tvpower/power/turnOnScreen',
   'system.notifications/createToast'];
 
