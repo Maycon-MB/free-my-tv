@@ -808,6 +808,41 @@
     });
   }
 
+  // MARK: - Quick controls (the TV's remote control API; the TV asks once to allow them)
+
+  var SLEEP_STEPS = [0, 30, 60, 90, 120], sleepStep = 0;
+
+  function sleepLabel() { return SLEEP_STEPS[sleepStep] ? 'Timer: ' + SLEEP_STEPS[sleepStep] + ' min' : 'Timer: desligado'; }
+
+  function screenOff() {
+    toast('Tela apagada. Aperte qualquer botão para acender.');
+    TV.control('com.webos.service.tvpower/power/turnOffScreen', {}, function (res) {
+      if (!res) toast('A TV não deixou apagar a tela (permita o Free My TV quando ela perguntar).');
+    });
+  }
+
+  function toggleMute() {
+    TV.control('audio/getStatus', {}, function (s) {
+      var mute = !(s && s.mute);
+      TV.control('audio/setMute', {mute: mute}, function (res) {
+        toast(res ? (mute ? 'Som mudo' : 'Som ligado') : 'A TV não deixou mudar o som.');
+      });
+    });
+  }
+
+  function cycleSleep() {
+    sleepStep = (sleepStep + 1) % SLEEP_STEPS.length;
+    var minutes = SLEEP_STEPS[sleepStep];
+    // A control call first, so the service has the TV's key and the person has allowed it.
+    TV.control('audio/getStatus', {}, function () {
+      TV.sleep(minutes, function (res) {
+        toast(!res ? 'Não deu para ligar o timer.' : minutes ? 'A TV desliga em ' + minutes + ' min.' : 'Timer desligado.');
+      });
+    });
+    renderDrawer();
+    updateFocus();
+  }
+
   // MARK: - Football: the followed teams' live, next or last match beside the tabs
 
   var TEAMS = [{league: 'bra.1', id: '819'}];   // Flamengo; ESPN ids, league slug as in its API
@@ -851,6 +886,7 @@
     }
     clearTimeout(footballTimer);
     footballTimer = setTimeout(pollFootball, live ? FOOTBALL_LIVE_EVERY : FOOTBALL_EVERY);
+    if (live) TV.watchGoals(TEAMS);   // the service keeps watching while another app is in front
   }
 
   function pollFootball() {
@@ -1120,6 +1156,9 @@
     }
     drawerInputs = drawerItems.length;
     drawerItems.push({label: tr('All Apps'), symbol: 'apps', run: openApps});
+    drawerItems.push({label: 'Apagar tela', symbol: 'tv', run: screenOff});
+    drawerItems.push({label: 'Mudo', symbol: 'speaker', run: toggleMute});
+    drawerItems.push({label: sleepLabel(), symbol: 'bedtime', run: cycleSleep});
     drawerItems.push({label: tr('Home Settings'), symbol: 'settings', run: openSettings});
     if (TV.canOpenSettings) drawerItems.push({label: tr('TV Settings'), symbol: 'tv_settings', run: tvSettings});
     var n = drawerItems.length, gap = 18, groupGap = 56, groups = drawerInputs > 0 && drawerInputs < n ? 2 : 1;

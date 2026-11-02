@@ -78,7 +78,7 @@ var TV = (function () {
   var SSAP_KEY = 'fmtv.ssapKey', SSAP_REFUSED = 'fmtv.ssapRefused';
 
   /** One call to the remote control API; done(result) with null on failure. */
-  function ssap(uri, done) {
+  function ssap(uri, done, params) {
     var ws = null, finished = false, key = null;
     var timer = setTimeout(function () { finish(null); }, 90000);   // time to answer the TV's prompt
     function finish(result) {
@@ -92,7 +92,8 @@ var TV = (function () {
     try { ws = new WebSocket('ws://127.0.0.1:3000'); } catch (e) { finish(null); return; }
     ws.onopen = function () {
       var payload = {forcePairing: false, pairingType: 'PROMPT',
-        manifest: {manifestVersion: 1, appVersion: '1.0', permissions: ['READ_INSTALLED_APPS']}};
+        manifest: {manifestVersion: 1, appVersion: '1.0', permissions: ['READ_INSTALLED_APPS', 'READ_RUNNING_APPS',
+          'READ_INPUT_DEVICE_LIST', 'CONTROL_INPUT_TV', 'CONTROL_AUDIO', 'CONTROL_POWER', 'WRITE_NOTIFICATION_TOAST']}};
       if (key) payload['client-key'] = key;
       ws.send(JSON.stringify({type: 'register', id: 'register', payload: payload}));
     };
@@ -102,7 +103,7 @@ var TV = (function () {
       if (!m) return;
       if (m.type === 'registered') {
         try { localStorage.setItem(SSAP_KEY, m.payload['client-key']); } catch (e) {}
-        ws.send(JSON.stringify({type: 'request', id: 'call', uri: 'ssap://' + uri}));
+        ws.send(JSON.stringify({type: 'request', id: 'call', uri: 'ssap://' + uri, payload: params || {}}));
       } else if (m.id === 'call' || m.type === 'error') {
         if (m.id === 'register' && m.type === 'error') {
           try { localStorage.setItem(SSAP_REFUSED, '1'); } catch (e) {}   // the person said no on the TV
@@ -117,7 +118,7 @@ var TV = (function () {
     function viaService() {
       clearTimeout(timer);
       timer = setTimeout(function () { finish(null); }, 100000);   // the service waits 90 s for the prompt
-      luna('luna://' + self + '.service/ssap', {uri: uri, clientKey: key}, function (res) {
+      luna('luna://' + self + '.service/ssap', {uri: uri, clientKey: key, params: params || {}}, function (res) {
         if (res && res.clientKey) {
           try { localStorage.setItem(SSAP_KEY, res.clientKey); } catch (e) {}
         }
@@ -528,6 +529,26 @@ var TV = (function () {
     backup: function (action, data, done) {
       if (!webos) { if (done) done(null); return; }
       luna('luna://' + self + '.service/backup', {action: action, data: data || ''}, done || null);
+    },
+
+    /** A call to the TV's remote control API (the TV asks once to allow it): done(payload) or null. */
+    control: function (uri, params, done) {
+      if (!webos) { if (done) done(null); return; }
+      ssap(uri, done || function () {}, params);
+    },
+
+    /** The service's sleep timer: off after minutes (0 cancels); done({at}) with the time it will turn off. */
+    sleep: function (minutes, done) {
+      if (!webos) { if (done) done(null); return; }
+      luna('luna://' + self + '.service/sleep', {minutes: minutes}, done || null);
+    },
+
+    /** Goal toasts on any app for these teams while they play. */
+    watchGoals: function (teams) {
+      if (!webos) return;
+      var key = null;
+      try { key = localStorage.getItem(SSAP_KEY); } catch (e) {}
+      luna('luna://' + self + '.service/watchGoals', {teams: teams, clientKey: key}, null);
     },
 
     /** Matches for teams [{league, id}] from the app's service: done({teams: [...]}) or null (not on LG). */

@@ -9,6 +9,14 @@ var Service = require('webos-service');
 
 var service = new Service(require('./package.json').name);
 
+// What the page may ask the TV's remote control API for, and the permissions the TV asks the person once to allow.
+var PERMISSIONS = ['READ_INSTALLED_APPS', 'READ_RUNNING_APPS', 'READ_INPUT_DEVICE_LIST', 'CONTROL_INPUT_TV',
+  'CONTROL_AUDIO', 'CONTROL_POWER', 'WRITE_NOTIFICATION_TOAST'];
+var ALLOWED = ['com.webos.applicationManager/listLaunchPoints', 'com.webos.applicationManager/getForegroundAppInfo',
+  'tv/getExternalInputList', 'tv/switchInput', 'audio/getStatus', 'audio/setMute', 'system/turnOff',
+  'com.webos.service.tvpower/power/turnOffScreen', 'com.webos.service.tvpower/power/turnOnScreen',
+  'system.notifications/createToast'];
+
 function buffer(x) {   // Buffer.from is missing before Node 4.5
   return Buffer.from ? Buffer.from(x) : new Buffer(x);
 }
@@ -22,7 +30,7 @@ function frame(text) {
 }
 
 /** done({clientKey, payload}), {refused: true} when the person said no on the TV, or null. */
-function call(uri, clientKey, done) {
+function call(uri, clientKey, params, done) {
   var socket = net.connect(3000, '127.0.0.1'), buf = buffer([]), open = false, text = '', finished = false;
   var timer = setTimeout(function () { finish(null); }, 90000);   // time to answer the TV's prompt
   function finish(result) {
@@ -38,7 +46,7 @@ function call(uri, clientKey, done) {
   function onMessage(m) {
     if (m.type === 'registered') {
       clientKey = m.payload['client-key'];
-      send({type: 'request', id: 'call', uri: 'ssap://' + uri});
+      send({type: 'request', id: 'call', uri: 'ssap://' + uri, payload: params || {}});
     } else if (m.id === 'call') {
       finish(m.type === 'error' ? null : {clientKey: clientKey, payload: m.payload});
     } else if (m.type === 'error') {
@@ -58,7 +66,7 @@ function call(uri, clientKey, done) {
       open = true;
       buf = buf.slice(end + 4);
       var payload = {forcePairing: false, pairingType: 'PROMPT',
-        manifest: {manifestVersion: 1, appVersion: '1.0', permissions: ['READ_INSTALLED_APPS']}};
+        manifest: {manifestVersion: 1, appVersion: '1.0', permissions: PERMISSIONS}};
       if (clientKey) payload['client-key'] = clientKey;
       send({type: 'register', id: 'register', payload: payload});
     }
@@ -227,16 +235,83 @@ service.register('backup', function (message) {
 
 service.register('ssap', function (message) {
   var p = message.payload || {};
-  // Only the app list, the one call the page makes: nothing else goes to the TV's API, nor gets its client key.
-  if (p.uri !== 'com.webos.applicationManager/listLaunchPoints') {
-    message.respond({returnValue: false, errorText: 'Only listLaunchPoints'});
-    return;
-  }
-  call(p.uri, p.clientKey, function (result) {
+  if (ALLOWED.indexOf(p.uri) < 0) { message.respond({returnValue: false, errorText: 'Not allowed: ' + p.uri}); return; }
+  if (p.clientKey) lastKey = p.clientKey;
+  call(p.uri, p.clientKey, p.params, function (result) {
+    if (result && result.clientKey) lastKey = result.clientKey;
     if (!result) message.respond({returnValue: false, errorText: 'No answer from the remote control API'});
     else {
       result.returnValue = true;
       message.respond(result);
     }
   });
+});
+
+// MARK: - Work that outlives the page (another app in front): the sleep timer and goal alerts. While either runs,
+// an activity keeps the service from being stopped as idle.
+
+var lastKey = null, keepAlive = null, sleepTimer = null, sleepAt = 0, watchTimer = null, watched = [], scores = {};
+
+function hold(on) {
+  if (on && !keepAlive && service.activityManager) {
+    service.activityManager.create('keepAlive', function (activity) { keepAlive = activity; });
+  } else if (!on && keepAlive && !sleepTimer && !watchTimer) {
+    service.activityManager.complete(keepAlive, function () {});
+    keepAlive = null;
+  }
+}
+
+service.register('sleep', function (message) {
+  var minutes = Number((message.payload || {}).minutes) || 0;
+  if (sleepTimer) { clearTimeout(sleepTimer); sleepTimer = null; sleepAt = 0; }
+  if (minutes > 0 && minutes <= 240 && lastKey) {
+    sleepAt = Date.now() + minutes * 60000;
+    sleepTimer = setTimeout(function () {
+      sleepTimer = null;
+      sleepAt = 0;
+      call('system/turnOff', lastKey, {}, function () { hold(false); });
+    }, minutes * 60000);
+    hold(true);
+  } else {
+    hold(false);
+  }
+  message.respond({returnValue: true, at: sleepAt});
+});
+
+function toast(text) {
+  if (lastKey) call('system.notifications/createToast', lastKey, {message: String(text).slice(0, 80)}, function () {});
+}
+
+/** Every minute while a followed team plays: a toast on any app when the score changes. */
+function checkGoals() {
+  var live = false, left = watched.length;
+  if (!left) { stopWatching(); return; }
+  watched.forEach(function (t) {
+    getJson(ESPN + t.league + '/teams/' + t.id, function (team) {
+      var e = team && team.team && team.team.nextEvent && team.team.nextEvent[0], m = match(e);
+      if (m && m.state === 'in' && m.home && m.away) {
+        live = true;
+        var key = m.date + m.home.id, score = m.home.score + ':' + m.away.score;
+        if (scores[key] !== undefined && scores[key] !== score) {
+          toast('GOL! ' + m.home.abbr + ' ' + m.home.score + ' × ' + m.away.score + ' ' + m.away.abbr + ' · ' + m.clock);
+        }
+        scores[key] = score;
+      }
+      if (--left === 0 && !live) stopWatching();
+    });
+  });
+}
+
+function stopWatching() {
+  if (watchTimer) { clearInterval(watchTimer); watchTimer = null; }
+  hold(false);
+}
+
+service.register('watchGoals', function (message) {
+  var p = message.payload || {};
+  if (p.clientKey) lastKey = p.clientKey;
+  watched = (p.teams || []).slice(0, 6).filter(function (t) { return /^[a-z0-9_.]+$/.test(t.league) && /^\d+$/.test(t.id); });
+  if (watched.length && !watchTimer) { watchTimer = setInterval(checkGoals, 60000); hold(true); checkGoals(); }
+  if (!watched.length) stopWatching();
+  message.respond({returnValue: true});
 });
