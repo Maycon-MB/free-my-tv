@@ -537,6 +537,12 @@ var TV = (function () {
       ssap(uri, done || function () {}, params);
     },
 
+    /** Renews Developer Mode from the TV, at most once a day: done({renewed, hours}) with the hours left, or null. */
+    renewDevMode: function (done) {
+      if (!webos) { done(null); return; }
+      luna('luna://' + self + '.service/renewDevMode', {}, done);
+    },
+
     /** The service's sleep timer: off after minutes (0 cancels); done({at}) with the time it will turn off. */
     sleep: function (minutes, done) {
       if (!webos) { if (done) done(null); return; }

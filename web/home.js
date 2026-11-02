@@ -674,12 +674,23 @@
     fill.style.width = Math.max(2, Math.min(100, share)) + '%';
   }
 
+  var devModeHours = -1;
+
+  function renewDevMode() {
+    TV.renewDevMode(function (res) {
+      if (res && res.hours >= 0) devModeHours = res.hours;
+      var panel = $('perf');
+      if (panel) renderPerf(panel);
+    });
+  }
+
   function renderPerf(card) {
     card.innerHTML = '';
     el('div', 'head', card, 'Desempenho da TV');
     var s = lastStats;
     if (!s) { el('div', 'side', card, 'lendo…'); return; }
-    el('div', 'side', card, 'a cada 5 s');
+    var days = devModeHours >= 0 ? 'Dev Mode: ' + Math.floor(devModeHours / 24) + ' dias' : 'a cada 5 s';
+    el('div', 'side' + (devModeHours >= 0 && devModeHours < 240 ? ' bad' : ''), card, days);
     var mem = s.mem || {usedMb: 0, totalMb: 1, swapUsedMb: 0, swapTotalMb: 0};
     perfRow(card, 84, 'CPU', s.cpu === undefined ? '—' : s.cpu + '%', s.cpu || 0, 70, 90);
     perfRow(card, 138, 'RAM', mem.usedMb + ' / ' + mem.totalMb + ' MB', mem.usedMb / mem.totalMb * 100, 92, 97);
@@ -690,6 +701,7 @@
     row.style.top = '246px';
     el('span', 'pname', row, net && net.kind === 'ethernet' ? 'CABO' : 'WI-FI');
     el('span', 'pval' + (net && net.up ? ' ok' : ' bad'), row, net ? (net.up ? '● ' + speedText(net.kbps) : '● desconectado') : '—');
+
   }
 
   function pollStats() {
@@ -2442,6 +2454,8 @@
   pollFootball();
   pollStats();
   setInterval(rotatePick, ROTATE_EVERY);
+  renewDevMode();
+  setInterval(renewDevMode, 6 * 3600000);   // the service renews only once a day; this keeps the days shown fresh
   setInterval(pollStats, STATS_EVERY);
   loadApps(function () {
     renderAll();

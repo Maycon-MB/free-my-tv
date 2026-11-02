@@ -356,3 +356,5 @@ body:not(.night) #searchpage, body:not(.night) #searchpage .shead { background: 
 body:not(.night) #searchpage input, body:not(.night) #searchpage .stitle { color: #1D1D1F; }
 body:not(.night) #searchpage .sfield, body:not(.night) #searchpage .chip { background: #FFF; border-color: rgba(0, 0, 0, 0.12); }
 body:not(.night) #buttons .round { background: #FFF; border: 1.5px solid rgba(0, 0, 0, 0.1); color: #1D1D1F; }
+
+#perf .side.bad { color: #FF7A7F; }   /* under 10 days of Developer Mode left */

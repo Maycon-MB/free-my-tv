@@ -315,3 +315,55 @@ service.register('watchGoals', function (message) {
   if (!watched.length) stopWatching();
   message.respond({returnValue: true});
 });
+
+// MARK: - Developer Mode renewal from the TV itself: LG's session lasts 1000 h, and the TV removes this app when it
+// ends. Once a day, when the home screen opens, the session goes back to 1000 h (the same call LG's EXTEND makes).
+
+var DEVMODE_TOKEN = '/var/luna/preferences/devmode_enabled';
+var RENEW_STATE = '/media/developer/temp/freemytv-renew.json';
+var LGE = 'https://developer.lge.com/secure/';
+var RENEW_EVERY = 20 * 3600000;
+
+function lgeCall(path, token, done) {
+  var req = https.get(LGE + path + '?sessionToken=' + encodeURIComponent(token), function (res) {
+    var body = '';
+    res.setEncoding('utf8');
+    res.on('data', function (c) { if (body.length < 10000) body += c; });
+    res.on('end', function () {
+      var data = null;
+      try { data = JSON.parse(body); } catch (e) {}
+      done(data);
+    });
+  });
+  req.on('error', function () { done(null); });
+  req.setTimeout(15000, function () { req.abort(); });
+}
+
+/** "999:59:59" (hours:minutes:seconds left) to hours, or -1. */
+function hoursLeft(text) {
+  var m = /^(\d+):\d+:\d+$/.exec(String(text || ''));
+  return m ? +m[1] : -1;
+}
+
+service.register('renewDevMode', function (message) {
+  var token = readText(DEVMODE_TOKEN).trim(), state = {};
+  try { state = JSON.parse(readText(RENEW_STATE)) || {}; } catch (e) {}
+  if (!/^[0-9a-f]{20,128}$/i.test(token)) {
+    message.respond({returnValue: false, errorText: 'no token', hours: state.hours || -1});
+    return;
+  }
+  var due = !state.at || Date.now() - state.at > RENEW_EVERY || Date.now() < state.at;
+  function check() {
+    lgeCall('CheckDevModeSession.dev', token, function (res) {
+      var hours = hoursLeft(res && res.errorMsg);
+      if (hours >= 0) state.hours = hours;
+      fs.writeFile(RENEW_STATE, JSON.stringify(state), function () {});
+      message.respond({returnValue: true, renewed: !!state.renewedNow, hours: state.hours === undefined ? -1 : state.hours});
+    });
+  }
+  if (!due) { check(); return; }
+  lgeCall('ResetDevModeSession.dev', token, function (res) {
+    if (res && res.result === 'success') { state.at = Date.now(); state.renewedNow = true; }
+    check();
+  });
+});
