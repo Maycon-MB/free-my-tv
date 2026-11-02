@@ -256,7 +256,7 @@ var keepAsking = false;
 
 /** Keeps the service alive exactly while a timer, a reminder or a match watch is pending. */
 function hold() {
-  var need = !!(sleepTimer || watchTimer || reminderTimer);
+  var need = !!(sleepTimer || watchTimer || reminderTimer || phone.server);
   if (!service.activityManager) return;
   if (need && !keepAlive && !keepAsking) {
     keepAsking = true;
@@ -402,7 +402,7 @@ function titles(xml) {
   return out;
 }
 
-service.register('info', function (message) {
+service.register('headlines', function (message) {
   if (infoCache.data && Date.now() - infoCache.at < 600000) { message.respond(infoCache.data); return; }
   var out = {returnValue: true, headlines: [], rates: {}}, left = HEADLINE_FEEDS.length + 1;
   function finish() {
@@ -508,12 +508,14 @@ function startPhone() {
     res.writeHead(200, {'Content-Type': 'text/html; charset=utf-8'});
     res.end(PHONE_PAGE);
   });
-  phone.server.on('error', function () { phone.server = null; });
+  phone.server.on('error', function () { phone.server = null; hold(); });
   phone.server.listen(phone.port);
+  hold();   // webOS stops an idle service, and the page would go with it
 }
 
 function stopPhone() {
   if (phone.server) { phone.server.close(); phone.server = null; }
+  hold();
   phone.code = '';
   phone.text = '';
 }

@@ -891,7 +891,7 @@
   }
 
   function pollInfo() {
-    TV.service('info', {}, function (res) {
+    TV.service('headlines', {}, function (res) {
       if (res) { news = res.headlines || []; rates = res.rates || null; showNews(); }
     });
   }
