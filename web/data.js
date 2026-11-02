@@ -677,7 +677,31 @@ var Data = (function () {
     });
   }
 
-  var netflixIds = {};
+  var netflixIds = {}, trailers = {};
+
+  /** The title's YouTube trailer key: done(key or ''), Portuguese first, official before fan uploads. */
+  function trailer(p, done) {
+    var k = keyOf(p);
+    if (trailers[k] !== undefined) { done(trailers[k]); return; }
+    function best(o) {
+      var list = (o && o.results) || [], found = '';
+      for (var i = 0; i < list.length; i++) {
+        var v = list[i];
+        if (v.site !== 'YouTube' || (v.type !== 'Trailer' && v.type !== 'Teaser')) continue;
+        if (!found || (v.official && v.type === 'Trailer')) found = v.key;
+        if (v.official && v.type === 'Trailer') break;
+      }
+      return found;
+    }
+    tmdb('/' + p.kind + '/' + p.id + '/videos?language=' + lang(), function (err, o) {
+      var key = err ? '' : best(o);
+      if (key) { trailers[k] = key; done(key); return; }
+      tmdb('/' + p.kind + '/' + p.id + '/videos?language=en-US', function (err2, o2) {
+        trailers[k] = err2 ? '' : best(o2);
+        done(trailers[k]);
+      });
+    });
+  }
 
   /**
    * The title's Netflix id from Wikidata (P1874), found by its TMDB id (P4947 movies, P4983 shows): done(id or '').
@@ -738,6 +762,7 @@ var Data = (function () {
     usable: usable,
     search: search,
     netflixId: netflixId,
+    trailer: trailer,
     services: services,
     refresh: function () { refreshWeather(); refreshPrices(); refreshRecs(); },
     settingsChanged: function () { pricesAt = 0; refreshPrices(); changed(); },

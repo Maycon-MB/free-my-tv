@@ -472,6 +472,7 @@
       el('div', 'name', card, p.title);
       if (p.meta) el('div', 'meta', card, p.meta);
       hover(card, Z.CARDS, c);
+      holdable(card);
     }
     st.card = Math.min(st.card, Math.max(0, list.length - 1));
     if (!list.length && st.zone === Z.CARDS) st.zone = Z.SHELF;
@@ -744,7 +745,8 @@
 
   function srCount() {
     var n = srShown.length;
-    return n ? n + (n > 1 ? ' resultados' : ' resultado') : 'Nada encontrado com esses filtros.';
+    return n ? n + (n > 1 ? ' resultados' : ' resultado') + ' · OK abre · segure OK para o trailer'
+      : 'Nada encontrado com esses filtros.';
   }
 
   function srFilter() {
@@ -791,6 +793,7 @@
       var meta = el('div', 'smeta' + (app ? ' mine' : ''), item, (p.year ? p.year + (where ? ' · ' : '') : '') + where);
       if (!app && p.paid) el('span', 'paid', meta, p.paid);   // only to rent or buy: said at the line's right end
       hover(item, Z.SEARCH, 2000 + i);
+      holdable(item);
     }
     if (inField) openField('searchpage');
     updateFocus();
@@ -819,6 +822,9 @@
   function closeSearch() {
     closeField('searchpage');
     setClass($('searchpage'), 'open', false);
+    $('searchpage').innerHTML = '';   // up to 15 decoded posters stay in RAM otherwise
+    srShown = [];
+    srAll = [];
     st.zone = Z.TOP;
     st.top = 3;
     updateFocus();
@@ -1576,9 +1582,9 @@
     if (Date.now() - pressAt < 150) return;   // the same press, seen as both a key and a click
     pressAt = Date.now();
     if (moving) { if (okReleased) stopMoving(); return; }
-    if (st.zone !== Z.SHELF || holdTimer) return;
+    if (!holdable_zone() || holdTimer) return;
     okReleased = false;
-    holdTimer = setTimeout(function () { holdTimer = 0; startMoving(); }, HOLD_MS);
+    holdTimer = setTimeout(function () { holdTimer = 0; if (st.zone === Z.SHELF) startMoving(); else playTrailer(); }, HOLD_MS);
   }
 
   function pressEnd() {
@@ -1625,7 +1631,7 @@
       else if (k === TV.keys.ok && !repeat) pressStart();
       return true;
     }
-    if (k !== TV.keys.ok || st.zone !== Z.SHELF) return false;
+    if (k !== TV.keys.ok || !holdable_zone()) return false;
     if (!repeat) pressStart();
     return true;
   }
@@ -1633,6 +1639,28 @@
   document.addEventListener('keyup', function (e) {
     if (e.keyCode === TV.keys.ok) pressEnd();
   });
+
+  /** Where holding OK does something: the shelf (move the app), a pick or a search result (its trailer). */
+  function holdable_zone() {
+    return st.zone === Z.SHELF || st.zone === Z.CARDS || (st.zone === Z.SEARCH && srPart === 2);
+  }
+
+  /** The focused title's trailer on YouTube (the TV's app may ask once whether to play it). */
+  function playTrailer() {
+    var p = st.zone === Z.CARDS ? cards[st.card] : srShown[srItem], yt = youtubeApp();
+    if (!p) return;
+    if (!yt) { toast('O YouTube não está instalado nesta TV.'); return; }
+    toast('Procurando o trailer de “' + p.title + '”…');
+    Data.trailer(p, function (key) {
+      if (!key) { toast('Não achei trailer de “' + p.title + '”.'); return; }
+      launcher(yt.id, yt.title, {contentTarget: 'v=' + key})();
+    });
+  }
+
+  function youtubeApp() {
+    for (var i = 0; i < apps.length; i++) if (/youtube\.leanback/.test(apps[i].id)) return apps[i];
+    return null;
+  }
 
   /** A shelf tile under the pointer: press and hold moves it, a short click opens it. */
   function holdable(tile) {
