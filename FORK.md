@@ -49,3 +49,17 @@ git switch <branch> && git rebase main
 ```
 
 Conflitos costumam cair em `web/home.js` e `web/data.js`; o tema fica isolado em `web/maycon.css`.
+
+## Backup das configurações
+
+O app grava as configurações em `/media/developer/temp/freemytv-backup.json` na TV a cada mudança.
+`python webos/backup.py <IP>` copia para `~/.freemytv/backups/`; depois de reinstalar,
+`python webos/backup.py <IP> --restore` devolve a cópia mais nova e o app a carrega ao abrir vazio.
+
+## Como desfazer tudo
+
+1. `python webos/install.py <IP> --uninstall` remove o app (a home da LG nunca foi alterada).
+2. Pelo SSH da TV: `luna-send-pub -n 1 luna://com.webos.service.eim/deleteDevice '{"appId":"io.freemytv"}'`
+   tira a entrada da TV.
+3. `Unregister-ScheduledTask FreeMyTV-RenovarDevMode` e apagar `%USERPROFILE%\.freemytv` param a renovação.
+4. No app Developer Mode da TV, desligar o Dev Mode Status.
