@@ -696,7 +696,40 @@ var Data = (function () {
     });
   }
 
-  var netflixIds = {}, trailers = {};
+  var trailers = {}, titleLinks = {};
+
+  /**
+   * Each service's Wikidata id properties (movie, show) and how its webOS app is sent to the title. Netflix's form is
+   * documented by the community; the others are the service's web address, which an app that doesn't take it ignores
+   * (it opens on its home, as without a link).
+   */
+  var TITLE_LINKS = {
+    netflix: [['P1874'], function (id) { return 'm=https://www.netflix.com/title/' + id + '&source_type=4'; }],
+    prime: [['P14462', 'P8055'], function (id) { return /^amzn1\./.test(id) ? id : 'https://www.primevideo.com/detail/' + id; }],
+    disney: [['P7595', 'P7596'], function (id, kind) {
+      return 'https://www.disneyplus.com/' + (kind === 'tv' ? 'series/wp/' : 'movies/wd/') + id;
+    }],
+    max: [['P8298'], function (id) { return 'https://play.max.com/' + id; }],
+    appletv: [['P9586', 'P9751'], function (id, kind) { return 'https://tv.apple.com/' + (kind === 'tv' ? 'show/' : 'movie/') + id; }],
+    globoplay: [['P12356'], function (id) { return 'https://globoplay.globo.com/-/t/' + id + '/'; }]
+  };
+
+  /** The contentTarget that opens a title in its service's app: done(target or ''). */
+  function titleLink(p, service, done) {
+    var spec = TITLE_LINKS[service], k = service + ':' + keyOf(p);
+    if (!spec) { done(''); return; }
+    if (titleLinks[k] !== undefined) { done(titleLinks[k]); return; }
+    var tmdbProp = p.kind === 'tv' ? 'P4983' : 'P4947', alts = [];
+    for (var i = 0; i < spec[0].length; i++) alts.push('{ ?i wdt:' + spec[0][i] + ' ?n }');
+    var q = 'SELECT ?n WHERE { ?i wdt:' + tmdbProp + ' "' + Number(p.id) + '" . ' + alts.join(' UNION ') + ' } LIMIT 1';
+    get('https://query.wikidata.org/sparql?format=json&query=' + encodeURIComponent(q), {Accept: 'application/sparql-results+json'},
+        function (err, o) {
+      var b = !err && o && o.results && o.results.bindings && o.results.bindings[0];
+      var id = b && b.n && /^[\w.:\/-]+$/.test(b.n.value) ? b.n.value : '';
+      titleLinks[k] = id ? spec[1](id, p.kind) : '';
+      done(titleLinks[k]);
+    });
+  }
 
   /** The title's YouTube trailer key: done(key or ''), Portuguese first, official before fan uploads. */
   function trailer(p, done) {
@@ -719,23 +752,6 @@ var Data = (function () {
         trailers[k] = err2 ? '' : best(o2);
         done(trailers[k]);
       });
-    });
-  }
-
-  /**
-   * The title's Netflix id from Wikidata (P1874), found by its TMDB id (P4947 movies, P4983 shows): done(id or '').
-   * TMDB has no Netflix ids, and this needs no key.
-   */
-  function netflixId(p, done) {
-    var k = keyOf(p);
-    if (netflixIds[k] !== undefined) { done(netflixIds[k]); return; }
-    var q = 'SELECT ?n WHERE { ?i wdt:' + (p.kind === 'tv' ? 'P4983' : 'P4947') + ' "' + Number(p.id) + '"; wdt:P1874 ?n } LIMIT 1';
-    get('https://query.wikidata.org/sparql?format=json&query=' + encodeURIComponent(q), {Accept: 'application/sparql-results+json'},
-        function (err, o) {
-      var b = !err && o && o.results && o.results.bindings && o.results.bindings[0];
-      var id = b && b.n && /^\d+$/.test(b.n.value) ? b.n.value : '';
-      netflixIds[k] = id;
-      done(id);
     });
   }
 
@@ -780,7 +796,7 @@ var Data = (function () {
     appFor: appFor,
     usable: usable,
     search: search,
-    netflixId: netflixId,
+    titleLink: titleLink,
     trailer: trailer,
     services: services,
     refresh: function () { refreshWeather(); refreshPrices(); refreshRecs(); },

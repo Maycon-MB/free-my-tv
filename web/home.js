@@ -274,11 +274,12 @@
     else { badge.className += ' word'; badge.textContent = p.service; }
   }
 
-  /** Opens a title in its app: Netflix straight on the title's page when Wikidata knows its id, others on their home. */
+  /** Opens a title in its app, on the title's page when Wikidata knows its id there (else on the app's home). */
   function openTitle(p, app, params) {
-    if (params || app.id !== 'netflix') { launcher(app.id, app.title, params)(); return null; }
-    Data.netflixId(p, function (id) {
-      launcher(app.id, app.title, id ? {contentTarget: 'm=https://www.netflix.com/title/' + id + '&source_type=4'} : null)();
+    if (params || !p.app) { launcher(app.id, app.title, params)(); return null; }
+    Data.titleLink(p, p.app, function (target) {
+      launcher(app.id, app.title, target ? {contentTarget: target} : null)();
+      if (!target) toast('Abrindo ' + app.title + ': procure “' + p.title + '” lá dentro.');
     });
     return true;
   }
