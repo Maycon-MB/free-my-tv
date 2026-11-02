@@ -1,0 +1,310 @@
+/*
+ * Maycon's look over home.css, after the constanciodev.com.br portfolio: near-black base, one red accent, mono
+ * uppercase labels, hairline borders. Loaded after home.css; theme=dark in config.properties keeps .night on.
+ * Speed first: no box-shadows (each one is an extra layer to paint on the TV's GPU); only transform and opacity animate.
+ */
+@font-face {
+  font-family: 'Mono';
+  src: url('mono-500.woff2') format('woff2');
+  font-weight: 500;
+}
+@font-face {
+  font-family: 'Mono';
+  src: url('mono-700.woff2') format('woff2');
+  font-weight: 700;
+}
+
+html, body, .night #sky .night { background: #0B0B0D; }
+.night #sky .veil { background: rgba(11, 11, 13, 0.86); }
+#stage *, #stage *::after { box-shadow: none !important; }
+
+/* Constellation, drawn once by home.js at half size and scaled up. */
+#sky #stars { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; opacity: 1; }
+
+/* Top: title and tabs */
+.night #title { color: #F2F2F3; letter-spacing: -0.025em; font-weight: 800; }
+.night .tab { color: #8C8C96; }
+.night .tab.on { color: #F2F2F3; }
+.night .tab.focus { background: #E5484D; color: #FFF; }
+
+.night .round {
+  background: #141417;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #B4B4BC;
+}
+.night .round.focus { background: #E5484D; color: #FFF; border-color: #E5484D; }
+.round .tip, .row-title {
+  font-family: 'Mono', monospace;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 19px;
+}
+.night .round.focus .tip { color: #FF7A7F; }
+
+/* Picks */
+.night .card .img { background-color: #141417; }
+.card .img::after { box-shadow: none; border: 3px solid #E5484D; border-radius: 18px; background: none; }
+.night .card .meta { color: #8C8C96; }
+
+/* Clock, when there are no picks */
+.night #clock { color: #F2F2F3; font-weight: 300; }
+.night #clock .date {
+  font-family: 'Mono', monospace;
+  font-size: 30px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #FF7A7F;
+}
+
+/* CPU, RAM and network: mono chips at the top right, colored only when something is off. */
+#stats {
+  position: absolute;
+  right: 80px;
+  top: 176px;
+  height: 36px;
+  font-family: 'Mono', monospace;
+  font-size: 21px;
+  font-weight: 500;
+  line-height: 36px;
+  white-space: nowrap;
+  color: #B4B4BC;
+}
+#stats .stat {
+  display: inline-block;
+  margin-left: 14px;
+  padding: 0 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  background: #141417;
+}
+#stats b { font-weight: 700; color: #8C8C96; margin-right: 8px; letter-spacing: 0.08em; }
+#stats .warn { color: #FFB86B; border-color: rgba(255, 184, 107, 0.35); }
+#stats .alarm { color: #FF7A7F; border-color: rgba(229, 72, 77, 0.5); }
+#stats .dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 10px;
+  border-radius: 5px;
+  background: #3DD68C;
+  vertical-align: 1px;
+}
+#stats .alarm .dot { background: #E5484D; }
+
+/* Shelf: a flat surface; the focused tile grows a little (less upscaling) and gets the red edge. */
+.night #platter {
+  background: #141417;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.tile::after {
+  bottom: 0;
+  height: auto;
+  border: 3px solid #E5484D;
+  border-radius: 22px;
+  background: none;
+}
+.tile.focus { -webkit-transform: scale(1.12); transform: scale(1.12); }
+
+/* The focused app's name under the shelf (home.js places it under the tile). */
+#tilename {
+  position: absolute;
+  top: 1034px;
+  width: 600px;
+  text-align: center;
+  font-family: 'Mono', monospace;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: #FF7A7F;
+  opacity: 0;
+  -webkit-transition: opacity 0.15s;
+  transition: opacity 0.15s;
+}
+
+/* Screensaver: the clock alone at the bottom left; the title, larger, apart at the bottom right. */
+#saver .clock {
+  background: rgba(11, 11, 13, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+#saver .clock .date {
+  font-family: 'Mono', monospace;
+  font-size: 26px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #FF7A7F;
+}
+#saver .caption {
+  position: absolute;
+  right: 90px;
+  bottom: 100px;
+  max-width: 900px;
+  text-align: right;
+  color: #FFF;
+}
+#saver .caption .title {
+  font-size: 60px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.08;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#saver .caption .hint {
+  margin-top: 14px;
+  font-family: 'Mono', monospace;
+  font-size: 20px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* Search: field, filter chips and a poster grid that scrolls a row at a time. */
+#searchpage { background: #0B0B0D; overflow: hidden; }
+#searchpage .shead {
+  position: absolute;
+  left: 90px;
+  right: 90px;
+  top: 60px;
+  height: 300px;
+  z-index: 2;
+  background: #0B0B0D;
+}
+#searchpage .eyebrow {
+  font-family: 'Mono', monospace;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #FF7A7F;
+}
+#searchpage .sfield {
+  margin-top: 18px;
+  height: 84px;
+  border: 2px solid rgba(255, 255, 255, 0.16);
+  border-radius: 18px;
+  background: #141417;
+}
+#searchpage .sfield.focus { border-color: #E5484D; }
+#searchpage input {
+  width: 100%;
+  height: 80px;
+  padding: 0 30px;
+  box-sizing: border-box;
+  border: 0;
+  outline: none;
+  background: none;
+  font: 500 36px 'Inter', sans-serif;
+  color: #F2F2F3;
+}
+#searchpage .chips { margin-top: 22px; white-space: nowrap; }
+#searchpage .chip {
+  display: inline-block;
+  height: 56px;
+  margin-right: 14px;
+  padding: 0 28px;
+  border: 2px solid rgba(255, 255, 255, 0.16);
+  border-radius: 28px;
+  font-size: 25px;
+  font-weight: 600;
+  line-height: 52px;
+  color: #B4B4BC;
+}
+#searchpage .chip.on { color: #FF7A7F; border-color: rgba(229, 72, 77, 0.6); }
+#searchpage .chip.focus { background: #E5484D; border-color: #E5484D; color: #FFF; }
+#searchpage .sstatus {
+  margin-top: 16px;
+  font-family: 'Mono', monospace;
+  font-size: 20px;
+  letter-spacing: 0.06em;
+  color: #8C8C96;
+}
+#searchpage .sgrid {
+  position: absolute;
+  left: 0;
+  top: 380px;
+  width: 1920px;
+  -webkit-transition: -webkit-transform 0.25s;
+  transition: transform 0.25s;
+}
+#searchpage .sitem { position: absolute; width: 266px; height: 500px; }
+#searchpage .poster {
+  width: 266px;
+  height: 399px;
+  border: 3px solid transparent;
+  border-radius: 18px;
+  background: #141417 center / cover no-repeat;
+  -webkit-transition: -webkit-transform 0.18s;
+  transition: transform 0.18s;
+}
+#searchpage .sitem.focus .poster { border-color: #E5484D; -webkit-transform: scale(1.05); transform: scale(1.05); }
+#searchpage .stitle {
+  margin-top: 16px;
+  font-size: 25px;
+  font-weight: 700;
+  color: #F2F2F3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#searchpage .smeta {
+  margin-top: 6px;
+  font-family: 'Mono', monospace;
+  font-size: 17px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8C8C96;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#searchpage .smeta.mine { color: #3DD68C; }
+
+/* The service a pick streams on, in the card's top left corner. */
+.card .badge {
+  position: absolute;
+  left: 14px;
+  top: 14px;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 10px;
+  background: rgba(11, 11, 13, 0.82);
+  font-family: 'Mono', monospace;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 38px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #F2F2F3;
+  white-space: nowrap;
+}
+.card .badge img { height: 22px; max-width: 110px; vertical-align: -5px; }
+
+/* Top buttons: 76 px rings with vector symbols; focus fills them red and shows the name below. */
+#buttons .round { top: 64px; width: 76px; height: 76px; border-radius: 38px; }
+#buttons .round .sym { left: 20px; top: 20px; width: 36px; height: 36px; -webkit-mask-size: 36px 36px; }
+.night #buttons .round { background: #141417; border: 1.5px solid rgba(255, 255, 255, 0.14); color: #F2F2F3; }
+.night #buttons .round.focus { background: #E5484D; border-color: #E5484D; color: #FFF; }
+#buttons .round .tip { top: 96px; }
+
+/* Moving an app: the tile lifts with a dashed red edge while ← → carry it. */
+.tile.moving { -webkit-transform: scale(1.12) translateY(-14px); transform: scale(1.12) translateY(-14px); }
+.tile.moving::after { opacity: 1; border-style: dashed; border-color: #FF7A7F; }
+
+/* Drawer: the TV's performance beside the weather, as labeled bars. */
+.night .panel { background: #141417; border: 1px solid rgba(255, 255, 255, 0.08); }
+.panel .head { font-family: 'Mono', monospace; font-size: 20px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+.night .panel .head { color: #FF7A7F; }
+#perf .side { font-family: 'Mono', monospace; font-size: 17px; letter-spacing: 0.06em; text-transform: uppercase; color: #8C8C96; }
+#perf .prow { position: absolute; left: 34px; right: 34px; height: 44px; font-family: 'Mono', monospace; }
+#perf .pname { position: absolute; left: 0; top: 0; font-size: 20px; font-weight: 700; letter-spacing: 0.1em; color: #8C8C96; }
+#perf .pval { position: absolute; right: 0; top: 0; font-size: 21px; font-weight: 500; color: #F2F2F3; }
+#perf .pval.ok { color: #3DD68C; }
+#perf .pval.bad { color: #FF7A7F; }
+#perf .pbar { position: absolute; left: 0; right: 0; top: 32px; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+#perf .pfill { height: 6px; border-radius: 3px; background: #3DD68C; }
+#perf .pfill.warn { background: #FFB86B; }
+#perf .pfill.alarm { background: #E5484D; }

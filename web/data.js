@@ -80,7 +80,7 @@ var Prefs = (function () {
     quotes: function () { return pick('quotes', CONFIG.showCrypto !== false); },
     coin: function (i) { var c = pick('coins', null); return c ? c[i] !== false : true; },
     /** Picks per tab: 3 (as it was) up to 6. */
-    cards: function () { var n = pick('cards', 3); return n < 3 ? 3 : n > 6 ? 6 : n; },
+    cards: function () { var n = pick('cards', 6); return n < 3 ? 3 : n > 6 ? 6 : n; },
     /** Cartoons and anime out of the picks (Home Settings), or config.properties' hide_animation. */
     hideAnimation: function () { return pick('hideAnimation', CONFIG.hideAnimation === true) === true; },
     shelf: function () { return pick('shelf', null); },
@@ -333,6 +333,7 @@ var Data = (function () {
     ['paramount', 'paramount', /paramount|cbs/, /paramount/i, 'Paramount+'],
     ['peacock', 'peacock', /peacock/, /peacock/i, 'Peacock'],
     ['globoplay', 'globoplay', /globoplay/, /globoplay/i, 'Globoplay'],
+    ['claro', 'claro', /claro/, /claro/i, 'Claro tv+'],   // TMDB: Claro tv+ (484) and Claro video (167)
     ['max', 'max', /hbo|wbd|\.max/, /^(hbo )?max$|hbo max/i, 'Max'],
     ['apple tv', 'appletv', /appletv|apple\.tv/, /apple tv/i, 'Apple TV'],
     ['hotstar', 'hotstar', /hotstar/, /hotstar/i, 'JioHotstar'],
@@ -578,8 +579,9 @@ var Data = (function () {
           tmdb('/discover/tv?vote_count.gte=20&air_date.gte=' + day(-90) + '&air_date.lte=' + day(0) + common, function (e2, r2) {
             for (var k = 0; !e2 && k < r2.results.length; k++) addPick(fresh.tv, r2.results[k], 'tv');
             var list = [], seen = {};
-            alternate(list, seen, hot.movie, hot.tv, 24);
+            // What's popular and streaming in this region first, the worldwide trending after it.
             alternate(list, seen, fresh.movie, fresh.tv, 24);
+            alternate(list, seen, hot.movie, hot.tv, 24);
             if (!list.length) { done(new Error('TMDB returned no recommendations')); return; }
             picks = list;
             done(null);
@@ -642,6 +644,66 @@ var Data = (function () {
     try { return v.toLocaleString(I18N.locale(), {minimumFractionDigits: digits, maximumFractionDigits: digits}); } catch (e) { return v.toFixed(digits); }
   }
 
+  // MARK: - Search: TMDB's titles, each with the service it streams on here and whether the TV has that app
+
+  var genreNames = null, searchSeq = 0;
+
+  /** {id: name} for movie and TV genres, fetched once in the TV's language. */
+  function genres(done) {
+    if (genreNames) { done(genreNames); return; }
+    var names = {}, left = 2;
+    ['movie', 'tv'].forEach(function (kind) {
+      tmdb('/genre/' + kind + '/list?language=' + lang(), function (err, o) {
+        for (var i = 0; !err && o && o.genres && i < o.genres.length; i++) names[o.genres[i].id] = o.genres[i].name;
+        if (--left === 0) { genreNames = names; done(names); }
+      });
+    });
+  }
+
+  /** The streaming service of a found title, among the ones this TV has (p.app, p.service), or none. */
+  function streamsOn(p, done) {
+    tmdb('/' + p.kind + '/' + p.id + '/watch/providers', function (err, o) {
+      var here = !err && o && o.results && o.results[REGION], flat = (here && here.flatrate) || [];
+      for (var i = 0; i < flat.length; i++) {
+        var s = service(flat[i].provider_name, flat[i].provider_id);
+        if (!s) continue;
+        if (!p.service) p.service = s[4];
+        if (usable(s[1])) { p.app = s[1]; p.service = s[4]; break; }
+      }
+      done();
+    });
+  }
+
+  /**
+   * Movies and shows for a query: done(error, [{id, kind, title, year, poster, backdrop, genres: [names], app,
+   * service}]). Only the newest query answers, so typing on doesn't show an older list.
+   */
+  function search(query, done) {
+    var seq = ++searchSeq;
+    if (!KEY) { done(new Error('no key'), []); return; }
+    genres(function (names) {
+      tmdb('/search/multi?include_adult=false&language=' + lang() + '&query=' + encodeURIComponent(query),
+          function (err, o) {
+        if (seq !== searchSeq) return;
+        if (err) { done(err, []); return; }
+        var found = [];
+        for (var i = 0; o && o.results && i < o.results.length && found.length < 15; i++) {
+          var r = o.results[i];
+          if ((r.media_type !== 'movie' && r.media_type !== 'tv') || !r.poster_path) continue;
+          found.push({id: r.id, kind: r.media_type, title: r.title || r.name || '',
+            year: (r.release_date || r.first_air_date || '').slice(0, 4), poster: r.poster_path,
+            backdrop: r.backdrop_path, app: null, service: '',
+            genres: (r.genre_ids || []).map(function (g) { return names[g]; }).filter(function (x) { return x; })});
+        }
+        var left = found.length;
+        if (!left) { done(null, found); return; }
+        found.forEach(function (p) {
+          streamsOn(p, function () { if (--left === 0 && seq === searchSeq) done(null, found); });
+        });
+      });
+    });
+  }
+
   var SYMBOLS = {USD: '$', BRL: 'R$ ', EUR: '€', GBP: '£', JPY: '¥'};
 
   return {
@@ -652,6 +714,7 @@ var Data = (function () {
     setApps: function (apps) { installed = apps; },
     appFor: appFor,
     usable: usable,
+    search: search,
     services: services,
     refresh: function () { refreshWeather(); refreshPrices(); refreshRecs(); },
     settingsChanged: function () { pricesAt = 0; refreshPrices(); changed(); },
