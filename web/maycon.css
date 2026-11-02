@@ -395,3 +395,7 @@ body:not(.night) #news .rates { background: #F5F5F7; }
   background: #141417;
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
+
+/* The phone page's QR code, at the search header's right; white around it so phones read it. */
+#searchpage .qr { position: absolute; right: 0; top: 0; width: 200px; height: 200px; border-radius: 14px; }
+#searchpage .sfield, #searchpage .chips, #searchpage .sstatus, #searchpage .phone { margin-right: 240px; }

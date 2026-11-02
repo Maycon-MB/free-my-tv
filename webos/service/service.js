@@ -505,8 +505,11 @@ function startPhone() {
       });
       return;
     }
+    // The QR code's link carries the code (?c=1234): the page fills it in, so the phone only types the title.
+    var given = /[?&]c=(\d{4})(&|$)/.exec(req.url || ''), page = PHONE_PAGE;
+    if (given) page = page.replace('<input name=code ', '<input type=hidden name=code value=' + given[1] + ' ');
     res.writeHead(200, {'Content-Type': 'text/html; charset=utf-8'});
-    res.end(PHONE_PAGE);
+    res.end(page);
   });
   phone.server.on('error', function () { phone.server = null; hold(); });
   phone.server.listen(phone.port);
@@ -525,7 +528,8 @@ service.register('phone', function (message) {
   var p = message.payload || {};
   if (p.action === 'start') {
     startPhone();
-    message.respond({returnValue: !!lanAddress(), url: 'http://' + lanAddress() + ':' + phone.port, code: phone.code});
+    var url = 'http://' + lanAddress() + ':' + phone.port;
+    message.respond({returnValue: !!lanAddress(), url: url, code: phone.code, qr: qrEncode(url + '/?c=' + phone.code)});
   } else if (p.action === 'poll') {
     var text = phone.text;
     phone.text = '';
@@ -559,3 +563,216 @@ service.register('teams', function (message) {
     }).sort(function (a, b) { return a.name < b.name ? -1 : 1; })});
   });
 });
+
+// MARK: - QR code for the phone page's address: app/src/io/freemytv/Qr.java (after Project Nayuki's QR Code generator,
+// MIT, notice there) in plain ES5. Byte mode, level M, versions 1 to 10; the mask with the lowest penalty.
+
+var QR_ECC = [0, 10, 16, 26, 18, 24, 16, 18, 22, 22, 26], QR_BLOCKS = [0, 1, 1, 1, 2, 2, 4, 4, 4, 5, 5];
+var QR_FINDER = [1, 0, 1, 1, 1, 0, 1, 0, 0, 0, 0];
+
+function qrRawModules(v) {
+  var n = (16 * v + 128) * v + 64;
+  if (v >= 2) {
+    var align = ((v / 7) | 0) + 2;
+    n -= (25 * align - 10) * align - 55;
+    if (v >= 7) n -= 36;
+  }
+  return n;
+}
+
+function qrDataCodewords(v) { return ((qrRawModules(v) / 8) | 0) - QR_ECC[v] * QR_BLOCKS[v]; }
+
+function qrGrid(size) {
+  var g = [];
+  for (var y = 0; y < size; y++) { g.push([]); for (var x = 0; x < size; x++) g[y].push(false); }
+  return g;
+}
+
+function qrEncode(text) {
+  var data = Buffer.from ? Buffer.from(String(text), 'utf8') : new Buffer(String(text), 'utf8');
+  var version = 1;
+  while (data.length > qrDataCodewords(version) - (version < 10 ? 2 : 3)) {
+    if (++version > 10) return null;
+  }
+  var size = version * 4 + 17, m = qrGrid(size), f = qrGrid(size);
+  function set(x, y, dark) { m[y][x] = dark; f[y][x] = true; }
+
+  function drawFormat(mask) {
+    var rem = mask, i;
+    for (i = 0; i < 10; i++) rem = (rem << 1) ^ ((rem >>> 9) * 0x537);
+    var bits = (mask << 10 | rem) ^ 0x5412;
+    function bit(k) { return ((bits >>> k) & 1) !== 0; }
+    for (i = 0; i <= 5; i++) set(8, i, bit(i));
+    set(8, 7, bit(6));
+    set(8, 8, bit(7));
+    set(7, 8, bit(8));
+    for (i = 9; i < 15; i++) set(14 - i, 8, bit(i));
+    for (i = 0; i < 8; i++) set(size - 1 - i, 8, bit(i));
+    for (i = 8; i < 15; i++) set(8, size - 15 + i, bit(i));
+    set(8, size - 8, true);
+  }
+
+  function drawFinder(cx, cy) {
+    for (var dy = -4; dy <= 4; dy++) {
+      for (var dx = -4; dx <= 4; dx++) {
+        var x = cx + dx, y = cy + dy, d = Math.max(Math.abs(dx), Math.abs(dy));
+        if (x >= 0 && x < size && y >= 0 && y < size) set(x, y, d !== 2 && d !== 4);
+      }
+    }
+  }
+
+  // Function patterns: timing, finders, alignment, format area, version info.
+  var i, j, a;
+  for (i = 0; i < size; i++) { set(6, i, i % 2 === 0); set(i, 6, i % 2 === 0); }
+  drawFinder(3, 3);
+  drawFinder(size - 4, 3);
+  drawFinder(3, size - 4);
+  var align = [];
+  if (version > 1) {
+    var n = ((version / 7) | 0) + 2, step = (((version * 4 + n * 2 + 1) / (n * 2 - 2)) | 0) * 2;
+    align[0] = 6;
+    for (i = n - 1, a = version * 4 + 10; i >= 1; i--, a -= step) align[i] = a;
+  }
+  for (i = 0; i < align.length; i++) {
+    for (j = 0; j < align.length; j++) {
+      if ((i === 0 && j === 0) || (i === 0 && j === align.length - 1) || (i === align.length - 1 && j === 0)) continue;
+      for (var dy = -2; dy <= 2; dy++) {
+        for (var dx = -2; dx <= 2; dx++) set(align[i] + dx, align[j] + dy, Math.max(Math.abs(dx), Math.abs(dy)) !== 1);
+      }
+    }
+  }
+  drawFormat(0);
+  if (version >= 7) {
+    var vr = version;
+    for (i = 0; i < 12; i++) vr = (vr << 1) ^ ((vr >>> 11) * 0x1F25);
+    var vbits = version << 12 | vr;
+    for (i = 0; i < 18; i++) {
+      var dark = ((vbits >>> i) & 1) !== 0, p = size - 11 + i % 3, q = (i / 3) | 0;
+      set(p, q, dark);
+      set(q, p, dark);
+    }
+  }
+
+  // Data codewords: byte mode, count, bytes, terminator, padding.
+  var cw = [], at = 0, total = qrDataCodewords(version);
+  for (i = 0; i < total; i++) cw.push(0);
+  function append(value, bits) {
+    for (var k = bits - 1; k >= 0; k--, at++) if (((value >>> k) & 1) !== 0) cw[at >>> 3] |= 0x80 >>> (at & 7);
+  }
+  append(4, 4);
+  append(data.length, version < 10 ? 8 : 16);
+  for (i = 0; i < data.length; i++) append(data[i], 8);
+  append(0, Math.min(4, total * 8 - at));
+  append(0, (8 - at % 8) % 8);
+  for (var pad = 0xEC; at < total * 8; pad ^= 0xEC ^ 0x11) append(pad, 8);
+
+  // Reed-Solomon per block, then interleaved.
+  function gfMul(x, y) {
+    var z = 0;
+    for (var k = 7; k >= 0; k--) { z = (z << 1) ^ ((z >>> 7) * 0x11D); z ^= ((y >>> k) & 1) * x; }
+    return z;
+  }
+  var ecc = QR_ECC[version], blocks = QR_BLOCKS[version], raw = (qrRawModules(version) / 8) | 0;
+  var shortBlocks = blocks - raw % blocks, shortLen = (raw / blocks) | 0, div = [], root = 1;
+  for (i = 0; i < ecc; i++) div.push(0);
+  div[ecc - 1] = 1;
+  for (i = 0; i < ecc; i++) {
+    for (j = 0; j < ecc; j++) { div[j] = gfMul(div[j], root); if (j + 1 < ecc) div[j] ^= div[j + 1]; }
+    root = gfMul(root, 2);
+  }
+  var all = [], k0 = 0;
+  for (i = 0; i < blocks; i++) {
+    var len = shortLen - ecc + (i < shortBlocks ? 0 : 1), block = [], rem2 = [];
+    for (j = 0; j < shortLen + 1; j++) block.push(0);
+    for (j = 0; j < ecc; j++) rem2.push(0);
+    for (j = 0; j < len; j++) {
+      block[j] = cw[k0 + j];
+      var factor = cw[k0 + j] ^ rem2[0];
+      rem2.shift();
+      rem2.push(0);
+      for (var r = 0; r < ecc; r++) rem2[r] ^= gfMul(div[r], factor);
+    }
+    for (j = 0; j < ecc; j++) block[block.length - ecc + j] = rem2[j];
+    k0 += len;
+    all.push(block);
+  }
+  var out = [];
+  for (i = 0; i < shortLen + 1; i++) {
+    for (j = 0; j < blocks; j++) if (i !== shortLen - ecc || j >= shortBlocks) out.push(all[j][i]);
+  }
+
+  // Codewords placed two columns at a time from the right, zigzagging.
+  var bitAt = 0;
+  for (var right = size - 1; right >= 1; right -= 2) {
+    if (right === 6) right = 5;
+    for (var vert = 0; vert < size; vert++) {
+      for (j = 0; j < 2; j++) {
+        var x = right - j, up = ((right + 1) & 2) === 0, y = up ? size - 1 - vert : vert;
+        if (!f[y][x] && bitAt < out.length * 8) { m[y][x] = ((out[bitAt >>> 3] >>> (7 - (bitAt & 7))) & 1) !== 0; bitAt++; }
+      }
+    }
+  }
+
+  function applyMask(mask) {
+    for (var yy = 0; yy < size; yy++) {
+      for (var xx = 0; xx < size; xx++) {
+        var inv;
+        switch (mask) {
+          case 0: inv = (xx + yy) % 2 === 0; break;
+          case 1: inv = yy % 2 === 0; break;
+          case 2: inv = xx % 3 === 0; break;
+          case 3: inv = (xx + yy) % 3 === 0; break;
+          case 4: inv = (((xx / 3) | 0) + ((yy / 2) | 0)) % 2 === 0; break;
+          case 5: inv = xx * yy % 2 + xx * yy % 3 === 0; break;
+          case 6: inv = (xx * yy % 2 + xx * yy % 3) % 2 === 0; break;
+          default: inv = ((xx + yy) % 2 + xx * yy % 3) % 2 === 0;
+        }
+        if (inv && !f[yy][xx]) m[yy][xx] = !m[yy][xx];
+      }
+    }
+  }
+
+  function cell(pass, p1, p2) { return pass === 0 ? m[p1][p2] : m[p2][p1]; }
+
+  function finderLike(pass, p1, p2, reversed) {
+    for (var k = 0; k < 11; k++) if (cell(pass, p1, p2 + k) !== !!QR_FINDER[reversed ? 10 - k : k]) return false;
+    return true;
+  }
+
+  function penalty() {
+    var score = 0, darkCount = 0, pass, p1, p2;
+    for (pass = 0; pass < 2; pass++) {
+      for (p1 = 0; p1 < size; p1++) {
+        var run = 1;
+        for (p2 = 1; p2 <= size; p2++) {
+          if (p2 < size && cell(pass, p1, p2) === cell(pass, p1, p2 - 1)) run++;
+          else { if (run >= 5) score += 3 + run - 5; run = 1; }
+        }
+        for (p2 = 0; p2 + 11 <= size; p2++) if (finderLike(pass, p1, p2, false) || finderLike(pass, p1, p2, true)) score += 40;
+      }
+    }
+    for (var yy = 0; yy < size; yy++) {
+      for (var xx = 0; xx < size; xx++) {
+        if (m[yy][xx]) darkCount++;
+        if (xx + 1 < size && yy + 1 < size && m[yy][xx] === m[yy][xx + 1] && m[yy][xx] === m[yy + 1][xx] &&
+            m[yy][xx] === m[yy + 1][xx + 1]) score += 3;
+      }
+    }
+    var cells = size * size;
+    score += (((Math.abs(darkCount * 20 - cells * 10) + cells - 1) / cells | 0) - 1) * 10;
+    return score;
+  }
+
+  var best = Infinity, chosen = 0;
+  for (var mk = 0; mk < 8; mk++) {
+    applyMask(mk);
+    drawFormat(mk);
+    var s = penalty();
+    if (s < best) { best = s; chosen = mk; }
+    applyMask(mk);
+  }
+  applyMask(chosen);
+  drawFormat(chosen);
+  // One string per row, '1' dark: small to send to the page, which draws it.
+  return m.map(function (row) { return row.map(function (d) { return d ? '1' : '0'; }).join(''); });
+}

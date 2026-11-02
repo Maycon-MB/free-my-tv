@@ -1166,7 +1166,20 @@
     for (var c = 0; c < labels.length; c++) hover(el('div', 'chip' + (active[c] ? ' on' : ''), chips, labels[c]), Z.SEARCH, 1000 + c);
     el('div', 'sstatus', head, srStatus);
     el('div', 'phone', head, phoneHint);
-    var grid = el('div', 'sgrid', page);
+    if (phoneQr) drawQr(el('canvas', 'qr', head), phoneQr);
+    field.oninput = typedSoon;
+    el('div', 'sgrid', page);
+    renderResults();
+    if (inField) openField('searchpage');
+    updateFocus();
+  }
+
+  /** Only the results and the status: while typing, the field (and the TV's keyboard) stay as they are. */
+  function renderResults() {
+    var page = $('searchpage'), grid = page.querySelector('.sgrid'), status = page.querySelector('.sstatus');
+    if (!grid) return;
+    grid.innerHTML = '';
+    if (status) status.textContent = srStatus;
     for (var i = 0; i < srShown.length; i++) {
       var p = srShown[i], item = el('div', 'sitem', grid), app = p.app && Data.appFor(p.app);
       item.style.left = (90 + (i % SEARCH_COLS) * 296) + 'px';
@@ -1179,8 +1192,29 @@
       hover(item, Z.SEARCH, 2000 + i);
       holdable(item);
     }
-    if (inField) openField('searchpage');
-    updateFocus();
+  }
+
+  // Results while typing: 3 letters and a short pause, so each key doesn't become a request.
+  var TYPE_PAUSE = 700, typeTimer = 0;
+
+  function typedSoon() {
+    clearTimeout(typeTimer);
+    typeTimer = setTimeout(function () {
+      var f = fieldOf('searchpage'), q = f ? f.value.replace(/^\s+|\s+$/g, '') : '';
+      if (st.zone === Z.SEARCH && q.length >= 3 && q !== srQuery) runSearch(true);
+    }, TYPE_PAUSE);
+  }
+
+  /** The phone page's QR code: dark modules on white, with the 4-module quiet zone the readers need. */
+  function drawQr(canvas, rows) {
+    var n = rows.length, cellPx = Math.floor(220 / (n + 8)), side = cellPx * (n + 8), g = canvas.getContext('2d');
+    canvas.width = canvas.height = side;
+    g.fillStyle = '#FFF';
+    g.fillRect(0, 0, side, side);
+    g.fillStyle = '#000';
+    for (var y = 0; y < n; y++) {
+      for (var x = 0; x < n; x++) if (rows[y].charAt(x) === '1') g.fillRect((x + 4) * cellPx, (y + 4) * cellPx, cellPx, cellPx);
+    }
   }
 
   function focusSearch() {
@@ -1212,14 +1246,14 @@
   }
 
   // Typing from the phone: the service serves a small page on the home network while the search is open.
-  var phoneTimer = 0, phoneHint = '';
+  var phoneTimer = 0, phoneHint = '', phoneQr = null;
 
   function startPhone() {
     TV.service('phone', {action: 'start'}, function (res) {
       if (!res || !res.url || st.zone !== Z.SEARCH) return;
-      phoneHint = 'No celular: ' + res.url.replace('http://', '') + '  ·  código ' + res.code;
-      var hint = $('searchpage').querySelector('.phone');
-      if (hint) hint.textContent = phoneHint;
+      phoneHint = 'Aponte a câmera do celular  ·  ou abra ' + res.url.replace('http://', '') + ', código ' + res.code;
+      phoneQr = res.qr || null;
+      renderSearch();
       clearInterval(phoneTimer);
       phoneTimer = setInterval(function () {
         TV.service('phone', {action: 'poll'}, function (r) {
@@ -1235,6 +1269,7 @@
   function stopPhone() {
     clearInterval(phoneTimer);
     phoneHint = '';
+    phoneQr = null;
     TV.service('phone', {action: 'stop'});
   }
 
@@ -1250,15 +1285,14 @@
     updateFocus();
   }
 
-  function runSearch() {
+  /** live: from typing, so the keyboard stays and only the results change. */
+  function runSearch(live) {
     var f = fieldOf('searchpage'), q = f ? f.value.replace(/^\s+|\s+$/g, '') : '';
-    closeField('searchpage');
+    if (!live) closeField('searchpage');
     if (q.length < 2) { srStatus = 'Digite pelo menos 2 letras.'; renderSearch(); return; }
     srQuery = q;
     srStatus = 'Procurando “' + q + '”…';
-    srAll = [];
-    srShown = [];
-    renderSearch();
+    if (live) renderResults(); else { srAll = []; srShown = []; renderSearch(); }
     Data.search(q, function (err, found) {
       if (st.zone !== Z.SEARCH) return;
       srAll = found || [];
@@ -1267,6 +1301,7 @@
       srFilter();
       srStatus = err ? 'Não deu para pesquisar agora. Confira a internet.'
         : (srAll[0] && srAll[0].person ? 'Com ' + srAll[0].person + ' · ' : '') + srCount();
+      if (live && typingIn('searchpage')) { renderResults(); return; }
       srPart = srShown.length ? 2 : 0;
       renderSearch();
     });
