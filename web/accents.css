@@ -1,0 +1,111 @@
+/* Generated from maycon.css: the red accent swapped per profile (body.accent-*). Text on yellow is #1D1D1B. */
+body.accent-blue.night .tab.focus { background: #3B82F6; }
+body.accent-blue.night .round.focus { background: #3B82F6; border-color: #3B82F6; }
+body.accent-blue.night .round.focus .tip { color: #7FB0FF; }
+body.accent-blue .card .img::after { border: 3px solid #3B82F6; }
+body.accent-blue.night #clock .date { color: #7FB0FF; }
+body.accent-blue #stats .alarm { color: #7FB0FF; border-color: rgba(59, 130, 246, 0.5); }
+body.accent-blue #stats .alarm .dot { background: #3B82F6; }
+body.accent-blue .tile::after { border: 3px solid #3B82F6; }
+body.accent-blue #tilename { color: #7FB0FF; }
+body.accent-blue #saver .clock .date { color: #7FB0FF; }
+body.accent-blue #searchpage .eyebrow { color: #7FB0FF; }
+body.accent-blue #searchpage .sfield.focus { border-color: #3B82F6; }
+body.accent-blue #searchpage .chip.on { color: #7FB0FF; border-color: rgba(59, 130, 246, 0.6); }
+body.accent-blue #searchpage .chip.focus { background: #3B82F6; border-color: #3B82F6; }
+body.accent-blue #searchpage .sitem.focus .poster { border-color: #3B82F6; }
+body.accent-blue.night #buttons .round.focus { background: #3B82F6; border-color: #3B82F6; }
+body.accent-blue .tile.moving::after { border-color: #7FB0FF; }
+body.accent-blue.night .panel .head { color: #7FB0FF; }
+body.accent-blue #perf .pval.bad { color: #7FB0FF; }
+body.accent-blue #perf .pfill.alarm { background: #3B82F6; }
+body.accent-blue #football .live { border-color: #3B82F6; }
+body.accent-blue #football .live .when { color: #7FB0FF; }
+body.accent-green.night .tab.focus { background: #22C55E; }
+body.accent-green.night .round.focus { background: #22C55E; border-color: #22C55E; }
+body.accent-green.night .round.focus .tip { color: #6EE7A0; }
+body.accent-green .card .img::after { border: 3px solid #22C55E; }
+body.accent-green.night #clock .date { color: #6EE7A0; }
+body.accent-green #stats .alarm { color: #6EE7A0; border-color: rgba(34, 197, 94, 0.5); }
+body.accent-green #stats .alarm .dot { background: #22C55E; }
+body.accent-green .tile::after { border: 3px solid #22C55E; }
+body.accent-green #tilename { color: #6EE7A0; }
+body.accent-green #saver .clock .date { color: #6EE7A0; }
+body.accent-green #searchpage .eyebrow { color: #6EE7A0; }
+body.accent-green #searchpage .sfield.focus { border-color: #22C55E; }
+body.accent-green #searchpage .chip.on { color: #6EE7A0; border-color: rgba(34, 197, 94, 0.6); }
+body.accent-green #searchpage .chip.focus { background: #22C55E; border-color: #22C55E; }
+body.accent-green #searchpage .sitem.focus .poster { border-color: #22C55E; }
+body.accent-green.night #buttons .round.focus { background: #22C55E; border-color: #22C55E; }
+body.accent-green .tile.moving::after { border-color: #6EE7A0; }
+body.accent-green.night .panel .head { color: #6EE7A0; }
+body.accent-green #perf .pval.bad { color: #6EE7A0; }
+body.accent-green #perf .pfill.alarm { background: #22C55E; }
+body.accent-green #football .live { border-color: #22C55E; }
+body.accent-green #football .live .when { color: #6EE7A0; }
+body.accent-purple.night .tab.focus { background: #8B5CF6; }
+body.accent-purple.night .round.focus { background: #8B5CF6; border-color: #8B5CF6; }
+body.accent-purple.night .round.focus .tip { color: #B9A0FF; }
+body.accent-purple .card .img::after { border: 3px solid #8B5CF6; }
+body.accent-purple.night #clock .date { color: #B9A0FF; }
+body.accent-purple #stats .alarm { color: #B9A0FF; border-color: rgba(139, 92, 246, 0.5); }
+body.accent-purple #stats .alarm .dot { background: #8B5CF6; }
+body.accent-purple .tile::after { border: 3px solid #8B5CF6; }
+body.accent-purple #tilename { color: #B9A0FF; }
+body.accent-purple #saver .clock .date { color: #B9A0FF; }
+body.accent-purple #searchpage .eyebrow { color: #B9A0FF; }
+body.accent-purple #searchpage .sfield.focus { border-color: #8B5CF6; }
+body.accent-purple #searchpage .chip.on { color: #B9A0FF; border-color: rgba(139, 92, 246, 0.6); }
+body.accent-purple #searchpage .chip.focus { background: #8B5CF6; border-color: #8B5CF6; }
+body.accent-purple #searchpage .sitem.focus .poster { border-color: #8B5CF6; }
+body.accent-purple.night #buttons .round.focus { background: #8B5CF6; border-color: #8B5CF6; }
+body.accent-purple .tile.moving::after { border-color: #B9A0FF; }
+body.accent-purple.night .panel .head { color: #B9A0FF; }
+body.accent-purple #perf .pval.bad { color: #B9A0FF; }
+body.accent-purple #perf .pfill.alarm { background: #8B5CF6; }
+body.accent-purple #football .live { border-color: #8B5CF6; }
+body.accent-purple #football .live .when { color: #B9A0FF; }
+body.accent-orange.night .tab.focus { background: #F97316; }
+body.accent-orange.night .round.focus { background: #F97316; border-color: #F97316; }
+body.accent-orange.night .round.focus .tip { color: #FFAB70; }
+body.accent-orange .card .img::after { border: 3px solid #F97316; }
+body.accent-orange.night #clock .date { color: #FFAB70; }
+body.accent-orange #stats .alarm { color: #FFAB70; border-color: rgba(249, 115, 22, 0.5); }
+body.accent-orange #stats .alarm .dot { background: #F97316; }
+body.accent-orange .tile::after { border: 3px solid #F97316; }
+body.accent-orange #tilename { color: #FFAB70; }
+body.accent-orange #saver .clock .date { color: #FFAB70; }
+body.accent-orange #searchpage .eyebrow { color: #FFAB70; }
+body.accent-orange #searchpage .sfield.focus { border-color: #F97316; }
+body.accent-orange #searchpage .chip.on { color: #FFAB70; border-color: rgba(249, 115, 22, 0.6); }
+body.accent-orange #searchpage .chip.focus { background: #F97316; border-color: #F97316; }
+body.accent-orange #searchpage .sitem.focus .poster { border-color: #F97316; }
+body.accent-orange.night #buttons .round.focus { background: #F97316; border-color: #F97316; }
+body.accent-orange .tile.moving::after { border-color: #FFAB70; }
+body.accent-orange.night .panel .head { color: #FFAB70; }
+body.accent-orange #perf .pval.bad { color: #FFAB70; }
+body.accent-orange #perf .pfill.alarm { background: #F97316; }
+body.accent-orange #football .live { border-color: #F97316; }
+body.accent-orange #football .live .when { color: #FFAB70; }
+body.accent-yellow.night .tab.focus { background: #FFE100; color: #1D1D1B; }
+body.accent-yellow.night .round.focus { background: #FFE100; border-color: #FFE100; color: #1D1D1B; }
+body.accent-yellow.night .round.focus .tip { color: #FFE97A; }
+body.accent-yellow .card .img::after { border: 3px solid #FFE100; }
+body.accent-yellow.night #clock .date { color: #FFE97A; }
+body.accent-yellow #stats .alarm { color: #FFE97A; border-color: rgba(255, 225, 0, 0.5); }
+body.accent-yellow #stats .alarm .dot { background: #FFE100; color: #1D1D1B; }
+body.accent-yellow .tile::after { border: 3px solid #FFE100; }
+body.accent-yellow #tilename { color: #FFE97A; }
+body.accent-yellow #saver .clock .date { color: #FFE97A; }
+body.accent-yellow #searchpage .eyebrow { color: #FFE97A; }
+body.accent-yellow #searchpage .sfield.focus { border-color: #FFE100; }
+body.accent-yellow #searchpage .chip.on { color: #FFE97A; border-color: rgba(255, 225, 0, 0.6); }
+body.accent-yellow #searchpage .chip.focus { background: #FFE100; border-color: #FFE100; color: #1D1D1B; }
+body.accent-yellow #searchpage .sitem.focus .poster { border-color: #FFE100; }
+body.accent-yellow.night #buttons .round.focus { background: #FFE100; border-color: #FFE100; color: #1D1D1B; }
+body.accent-yellow .tile.moving::after { border-color: #FFE97A; }
+body.accent-yellow.night .panel .head { color: #FFE97A; }
+body.accent-yellow #perf .pval.bad { color: #FFE97A; }
+body.accent-yellow #perf .pfill.alarm { background: #FFE100; color: #1D1D1B; }
+body.accent-yellow #football .live { border-color: #FFE100; }
+body.accent-yellow #football .live .when { color: #FFE97A; }

@@ -695,6 +695,97 @@
     TV.stats(showStats);
   }
 
+  // MARK: - Profiles: each keeps its own shelf order, theme, accent color and kids mode
+
+  var PROFILE_KEYS = ['shelf', 'theme', 'accent', 'kids'];
+  var PROFILE_NAMES = ['Maycon', 'Família', 'Crianças', 'Visitas', 'Convidado'];
+  var ACCENTS = [['red', 'Vermelho'], ['blue', 'Azul'], ['green', 'Verde'], ['purple', 'Roxo'], ['orange', 'Laranja'],
+    ['yellow', 'Amarelo']];
+  var ACCENT_RGB = {red: '229,72,77', blue: '59,130,246', green: '34,197,94', purple: '139,92,246', orange: '249,115,22',
+    yellow: '255,225,0'};
+  var deleteArmed = false;
+
+  function profiles() { return Prefs.get('profiles', [{name: PROFILE_NAMES[0]}]); }
+  function current() { return Math.min(Prefs.get('profile', 0), profiles().length - 1); }
+
+  /** The live settings of the current profile, as stored in its slot. */
+  function snapshot() {
+    var p = {name: profiles()[current()].name};
+    for (var i = 0; i < PROFILE_KEYS.length; i++) p[PROFILE_KEYS[i]] = Prefs.get(PROFILE_KEYS[i], undefined);
+    return p;
+  }
+
+  function switchProfile(to) {
+    var list = profiles().slice();
+    list[current()] = snapshot();
+    var next = list[to] || {};
+    for (var i = 0; i < PROFILE_KEYS.length; i++) Prefs.set(PROFILE_KEYS[i], next[PROFILE_KEYS[i]]);
+    Prefs.set('profiles', list);
+    Prefs.set('profile', to);
+    profileChanged();
+  }
+
+  function profileChanged() {
+    applyAccent();
+    checkNight();
+    pickShelf();
+    renderShelf();
+    Data.settingsChanged();
+    Data.refresh();
+    toast('Perfil: ' + profiles()[current()].name);
+  }
+
+  function applyAccent() {
+    var accent = Prefs.get('accent', 'red');
+    body.className = body.className.replace(/\s*accent-\w+/g, '') + ' accent-' + accent;
+    drawStars();
+  }
+
+  function profileRows() {
+    var list = profiles(), at = current(), accent = Prefs.get('accent', 'red'), a = 0;
+    for (var k = 0; k < ACCENTS.length; k++) if (ACCENTS[k][0] === accent) a = k;
+    var rows = [
+      {label: 'Perfil', value: list[at].name + (list.length > 1 ? '  (' + (at + 1) + '/' + list.length + ')' : ''),
+        step: function (d) { if (list.length > 1) switchProfile((at + (d || 1) + list.length) % list.length); }},
+      {label: 'Nome do perfil', value: list[at].name,
+        step: function (d) {
+          var copy = profiles().slice(), i = PROFILE_NAMES.indexOf(copy[at].name);
+          copy[at] = snapshot();
+          copy[at].name = PROFILE_NAMES[(i + (d || 1) + PROFILE_NAMES.length) % PROFILE_NAMES.length];
+          Prefs.set('profiles', copy);
+        }},
+      {label: 'Cor de destaque', value: ACCENTS[a][1],
+        step: function (d) { Prefs.set('accent', ACCENTS[(a + (d || 1) + ACCENTS.length) % ACCENTS.length][0]); applyAccent(); }},
+      {label: 'Modo infantil', toggle: !!Prefs.get('kids', false),
+        step: function () { Prefs.set('kids', !Prefs.get('kids', false)); Data.settingsChanged(); Data.refresh(); }},
+      {label: 'Novo perfil', value: '+',
+        step: function (d) {
+          if (d < 0) return;
+          var copy = profiles().slice();
+          copy[at] = snapshot();
+          copy.push({name: PROFILE_NAMES[copy.length % PROFILE_NAMES.length]});
+          Prefs.set('profiles', copy);
+          switchProfile(copy.length - 1);
+        }}
+    ];
+    if (list.length > 1) {
+      rows.push({label: deleteArmed ? 'Confirmar: excluir ' + list[at].name + '?' : 'Excluir este perfil', value: '×',
+        step: function (d) {
+          if (d < 0) return;
+          if (!deleteArmed) { deleteArmed = true; return; }
+          deleteArmed = false;
+          var copy = profiles().slice();
+          copy.splice(at, 1);
+          var to = Math.max(0, at - 1), next = copy[to];
+          for (var i = 0; i < PROFILE_KEYS.length; i++) Prefs.set(PROFILE_KEYS[i], next[PROFILE_KEYS[i]]);
+          Prefs.set('profiles', copy);
+          Prefs.set('profile', to);
+          profileChanged();
+        }});
+    }
+    return rows;
+  }
+
   // MARK: - Backup: every change goes to a file on the TV; a fresh install (nothing stored yet) restores from it
 
   var backupTimer = 0;
@@ -772,6 +863,7 @@
     var canvas = $('stars');
     if (!canvas || !canvas.getContext) return;
     var g = canvas.getContext('2d'), w = canvas.width, h = canvas.height, reach = 110, pts = [];
+    var rgb = ACCENT_RGB[Prefs.get('accent', 'red')] || ACCENT_RGB.red;
     for (var i = 0; i < 46; i++) pts.push({x: Math.random() * w, y: Math.random() * h, r: Math.random() * 0.7 + 0.6});
     g.clearRect(0, 0, w, h);
     g.lineWidth = 0.6;
@@ -779,7 +871,7 @@
       for (var j = i + 1; j < pts.length; j++) {
         var dx = pts[i].x - pts[j].x, dy = pts[i].y - pts[j].y, d = Math.sqrt(dx * dx + dy * dy);
         if (d >= reach) continue;
-        g.strokeStyle = 'rgba(229,72,77,' + ((1 - d / reach) * 0.55).toFixed(3) + ')';
+        g.strokeStyle = 'rgba(' + rgb + ',' + ((1 - d / reach) * 0.55).toFixed(3) + ')';
         g.beginPath();
         g.moveTo(pts[i].x, pts[i].y);
         g.lineTo(pts[j].x, pts[j].y);
@@ -787,7 +879,7 @@
       }
     }
     for (i = 0; i < pts.length; i++) {
-      g.fillStyle = 'rgba(229,72,77,0.08)';
+      g.fillStyle = 'rgba(' + rgb + ',0.08)';
       g.beginPath();
       g.arc(pts[i].x, pts[i].y, pts[i].r * 3, 0, 6.283);
       g.fill();
@@ -1148,7 +1240,7 @@
   function settingRows() {
     var unit = Prefs.temperature(), theme = Prefs.theme();
     var auto = tr('Automatic'), picked = pickedLanguage();
-    var rows = [
+    var rows = profileRows().concat([
       {label: tr('Language'), value: picked === 'auto' ? auto : I18N.languageName(picked), opens: true, language: true,
         step: function (d) { if (d >= 0) openLanguages(); }},
       {label: tr('Temperature'), value: unit === 'C' ? '°C' : unit === 'F' ? '°F' : tr('unit|Automatic'),
@@ -1173,7 +1265,7 @@
         step: function (d) { cycle('forecast', ['hours', 'days'], Prefs.forecast(), d); renderPanels(); }},
       {label: tr('Quotes widget'), toggle: Prefs.quotes(),
         step: function () { Prefs.set('quotes', !Prefs.quotes()); Data.settingsChanged(); }}
-    ];
+    ]);
     var names = ['Bitcoin', 'Ethereum', 'Solana', tr('Dollar')];
     var count = Data.currency === 'BRL' ? 4 : 3;
     for (var i = 0; i < count; i++) {
@@ -2223,7 +2315,7 @@
   renderTop();
   applyDim();
   tickClock();
-  drawStars();
+  applyAccent();
   restoreBackup();
   Prefs.onSave(backupSoon);
   pollFootball();

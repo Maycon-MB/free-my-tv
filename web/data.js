@@ -112,6 +112,7 @@ var Prefs = (function () {
     onSave: function (fn) { savedListeners.push(fn); },
     /** Everything the person set, as stored: what the backup keeps. */
     dump: function () { return JSON.stringify(v); },
+    get: function (name, fallback) { return pick(name, fallback); },
     setCoin: function (i, on) {
       var c = (pick('coins', null) || [true, true, true, true]).slice();
       c[i] = on;
@@ -411,7 +412,8 @@ var Data = (function () {
   }
 
   function sourceStamp() {
-    var s = KEY.length + ':' + KEY.slice(-6) + ':' + REGION + (Prefs.hideAnimation() ? ':no-animation' : '');
+    var s = KEY.length + ':' + KEY.slice(-6) + ':' + REGION + (Prefs.hideAnimation() ? ':no-animation' : '')
+      + (Prefs.get('kids', false) ? ':kids' : '');
     for (var i = 0; i < SERVICES.length; i++) s += usable(SERVICES[i][1]) ? '1' : '0';
     return s;
   }
@@ -530,6 +532,15 @@ var Data = (function () {
   /** TMDB's Animation genre (movies and shows: cartoons and anime), left out with Cartoons and anime off. */
   var ANIMATION = 16;
 
+  /** Kids mode keeps only TMDB's Animation, Family and Kids genres. */
+  function forFamily(o) {
+    for (var i = 0; o.genre_ids && i < o.genre_ids.length; i++) {
+      var g = o.genre_ids[i];
+      if (g === ANIMATION || g === 10751 || g === 10762) return true;
+    }
+    return false;
+  }
+
   function animated(o) {
     for (var i = 0; o.genre_ids && i < o.genre_ids.length; i++) if (o.genre_ids[i] === ANIMATION) return true;
     return false;
@@ -537,7 +548,7 @@ var Data = (function () {
 
   function addPick(list, o, kind) {
     if (!o.backdrop_path) return;
-    if (Prefs.hideAnimation() && animated(o)) return;
+    if (Prefs.get('kids', false) ? !forFamily(o) : Prefs.hideAnimation() && animated(o)) return;
     list.push({id: o.id, kind: kind, title: kind === 'movie' ? o.title : o.name, backdrop: o.backdrop_path, poster: o.poster_path || '', meta: '', app: null, detailed: false});
   }
 

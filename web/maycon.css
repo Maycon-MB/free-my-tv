@@ -14,7 +14,7 @@
   font-weight: 700;
 }
 
-html, body, .night #sky .night { background: #0B0B0D; }
+body.night, .night #sky .night { background: #0B0B0D; }
 .night #sky .veil { background: rgba(11, 11, 13, 0.86); }
 #stage *, #stage *::after { box-shadow: none !important; }
 
@@ -344,3 +344,15 @@ html, body, .night #sky .night { background: #0B0B0D; }
 }
 #football .live { border-color: #E5484D; }
 #football .live .when { color: #FF7A7F; }
+
+/* Light theme (a profile's choice): the dark chips and pages turn light. */
+body:not(.night) #stars { opacity: 0.35; }
+body:not(.night) #stats .stat, body:not(.night) #football .match, body:not(.night) #platter {
+  background: #FFF;
+  border-color: rgba(0, 0, 0, 0.1);
+  color: #1D1D1F;
+}
+body:not(.night) #searchpage, body:not(.night) #searchpage .shead { background: #F5F5F7; }
+body:not(.night) #searchpage input, body:not(.night) #searchpage .stitle { color: #1D1D1F; }
+body:not(.night) #searchpage .sfield, body:not(.night) #searchpage .chip { background: #FFF; border-color: rgba(0, 0, 0, 0.12); }
+body:not(.night) #buttons .round { background: #FFF; border: 1.5px solid rgba(0, 0, 0, 0.1); color: #1D1D1F; }
