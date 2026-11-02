@@ -1265,7 +1265,8 @@
       srGenre = 0;
       srItem = 0;
       srFilter();
-      srStatus = err ? 'Não deu para pesquisar agora. Confira a internet.' : srCount();
+      srStatus = err ? 'Não deu para pesquisar agora. Confira a internet.'
+        : (srAll[0] && srAll[0].person ? 'Com ' + srAll[0].person + ' · ' : '') + srCount();
       srPart = srShown.length ? 2 : 0;
       renderSearch();
     });

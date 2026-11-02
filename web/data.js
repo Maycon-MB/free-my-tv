@@ -755,33 +755,139 @@ var Data = (function () {
     });
   }
 
+  // Search rules, all here (the screen only shows what comes back):
+  // 1. A person ("Tom Hanks") brings their movies and shows; else titles from TMDB's search.
+  // 2. Nothing found: tries again without short words, then word by word (typos like "la casa d papel").
+  // 3. Order: streaming on the TV's apps first, then closest to what was typed, then popularity; making-ofs and
+  //    titles nobody rated go last.
+  var SEARCH_MAX = 15, SEARCH_PROVIDERS = 10;
+  var EXTRAS = /making of|bastidores|especial|behind the scenes|featurette/i;
+
+  /** Lowercase, without accents or punctuation: "Pokémon: O Filme" -> "pokemon o filme". */
+  function plain(text) {
+    var s = String(text || '').toLowerCase();
+    var from = 'áàâãäéèêëíìîïóòôõöúùûüçñ', to = 'aaaaaeeeeiiiiooooouuuucn';
+    for (var i = 0; i < from.length; i++) s = s.split(from.charAt(i)).join(to.charAt(i));
+    return s.replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+
+  /** How alike two texts are, 0 to 1 (Dice over letter pairs, spaces ignored): survives typos and glued words. */
+  function likeness(a, b) {
+    a = plain(a).replace(/ /g, '');
+    b = plain(b).replace(/ /g, '');
+    if (!a || !b) return 0;
+    if (a === b) return 1;
+    var pairs = {}, total = 0, hits = 0, i, k;
+    for (i = 0; i < a.length - 1; i++) { k = a.substr(i, 2); pairs[k] = (pairs[k] || 0) + 1; total++; }
+    for (i = 0; i < b.length - 1; i++) { k = b.substr(i, 2); total++; if (pairs[k] > 0) { pairs[k]--; hits++; } }
+    return total ? 2 * hits / total : 0;
+  }
+
+  /** The queries to try, in order: as typed, without words under 3 letters, then each long word, longest first. */
+  function attempts(query) {
+    var words = plain(query).split(' '), out = [query], longer = [], i;
+    for (i = 0; i < words.length; i++) if (words[i].length >= 3) longer.push(words[i]);
+    if (longer.length && longer.join(' ') !== plain(query)) out.push(longer.join(' '));
+    longer.sort(function (a, b) { return b.length - a.length; });
+    for (i = 0; i < longer.length && i < 2; i++) if (longer[i].length >= 4 && longer.length > 1) out.push(longer[i]);
+    return out;
+  }
+
+  function asTitle(r, kind, names) {
+    return {id: r.id, kind: kind, title: r.title || r.name || '', original: r.original_title || r.original_name || '',
+      year: (r.release_date || r.first_air_date || '').slice(0, 4), poster: r.poster_path, backdrop: r.backdrop_path,
+      popularity: r.popularity || 0, votes: r.vote_count || 0, app: null, service: '',
+      genres: (r.genre_ids || []).map(function (g) { return names[g]; }).filter(function (x) { return x; })};
+  }
+
+  /** Higher first: what the TV can play, then the closest name, then popularity; extras and unrated go down. */
+  function score(p, query) {
+    var near = Math.max(likeness(p.title, query), likeness(p.original, query));
+    var s = (p.app && usable(p.app) ? 2 : 0) + near * 1.5 + Math.min(1, Math.log(1 + p.popularity) / 6);
+    if (EXTRAS.test(p.title) || p.votes < 3) s -= 1.5;
+    return s;
+  }
+
+  function rank(list, query) {
+    return list.map(function (p, i) { return [p, score(p, query), i]; })
+      .sort(function (a, b) { return (b[1] - a[1]) || (a[2] - b[2]); })
+      .map(function (x) { return x[0]; });
+  }
+
+  // Talk shows, news and reality (TMDB genres): a guest spot there isn't one of the person's works.
+  var NOT_WORKS = [10767, 10763, 10764], AS_SELF = /self|himself|herself|ele mesmo|ela mesma/i;
+
+  /** A person's own work: films, series with 3+ episodes, or what they directed or created; best known first. */
+  function isWork(c) {
+    if ((c.media_type !== 'movie' && c.media_type !== 'tv') || !c.poster_path) return false;
+    if (c.job && c.job !== 'Director' && c.job !== 'Creator') return false;
+    for (var i = 0; c.genre_ids && i < c.genre_ids.length; i++) if (NOT_WORKS.indexOf(c.genre_ids[i]) >= 0) return false;
+    if (AS_SELF.test(c.character || '')) return false;
+    return c.media_type === 'movie' || !!c.job || (c.episode_count || 0) >= 3;
+  }
+
+  function personTitles(person, names, done) {
+    tmdb('/person/' + person.id + '/combined_credits?language=' + lang(), function (err, o) {
+      var seen = {}, out = [];
+      var all = ((o && o.cast) || []).concat((o && o.crew) || []).filter(isWork);
+      all.sort(function (a, b) { return (b.vote_count || 0) - (a.vote_count || 0); });
+      for (var i = 0; i < all.length && out.length < SEARCH_MAX; i++) {
+        var k = all[i].media_type + ':' + all[i].id;
+        if (seen[k]) continue;
+        seen[k] = true;
+        out.push(asTitle(all[i], all[i].media_type, names));
+      }
+      done(err, out);
+    });
+  }
+
   /**
-   * Movies and shows for a query: done(error, [{id, kind, title, year, poster, backdrop, genres: [names], app,
-   * service}]). Only the newest query answers, so typing on doesn't show an older list.
+   * Movies and shows for a query: done(error, [{id, kind, title, year, poster, backdrop, genres, app, service,
+   * paid, person}]). Only the newest query answers, so typing on doesn't show an older list.
    */
   function search(query, done) {
-    var seq = ++searchSeq;
+    var seq = ++searchSeq, tries = attempts(query);
     if (!KEY) { done(new Error('no key'), []); return; }
-    genres(function (names) {
-      tmdb('/search/multi?include_adult=false&language=' + lang() + '&query=' + encodeURIComponent(query),
-          function (err, o) {
-        if (seq !== searchSeq) return;
-        if (err) { done(err, []); return; }
-        var found = [];
-        for (var i = 0; o && o.results && i < o.results.length && found.length < 15; i++) {
-          var r = o.results[i];
-          if ((r.media_type !== 'movie' && r.media_type !== 'tv') || !r.poster_path) continue;
-          found.push({id: r.id, kind: r.media_type, title: r.title || r.name || '',
-            year: (r.release_date || r.first_air_date || '').slice(0, 4), poster: r.poster_path,
-            backdrop: r.backdrop_path, app: null, service: '',
-            genres: (r.genre_ids || []).map(function (g) { return names[g]; }).filter(function (x) { return x; })});
-        }
-        var left = found.length;
-        if (!left) { done(null, found); return; }
-        found.forEach(function (p) {
-          streamsOn(p, function () { if (--left === 0 && seq === searchSeq) done(null, found); });
+    function finish(err, found, person) {
+      if (seq !== searchSeq) return;
+      if (err && !found.length) { done(err, []); return; }
+      found = found.slice(0, SEARCH_MAX);
+      var first = found.slice(0, SEARCH_PROVIDERS), left = first.length;
+      if (!left) { done(null, found); return; }
+      first.forEach(function (p) {
+        streamsOn(p, function () {
+          if (--left || seq !== searchSeq) return;
+          found = person ? found : rank(found, query);
+          if (person) for (var i = 0; i < found.length; i++) found[i].person = person;
+          done(null, found);
         });
       });
+    }
+    genres(function (names) {
+      (function attempt(n) {
+        tmdb('/search/multi?include_adult=false&language=' + lang() + '&query=' + encodeURIComponent(tries[n]),
+            function (err, o) {
+          if (seq !== searchSeq) return;
+          var results = (o && o.results) || [], who = null;
+          // The person whose name is what was typed, even below a documentary with that name in its title.
+          for (var j = 0; j < results.length && j < 6 && !who; j++) {
+            if (results[j].media_type === 'person' && likeness(results[j].name, query) > 0.85) who = results[j];
+          }
+          if (who) {
+            personTitles(who, names, function (e, list) { finish(e, list, who.name); });
+            return;
+          }
+          var found = [];
+          for (var i = 0; i < results.length; i++) {
+            var r = results[i];
+            if ((r.media_type === 'movie' || r.media_type === 'tv') && r.poster_path) found.push(asTitle(r, r.media_type, names));
+          }
+          // A retry with fewer words matches loosely: keep only titles that look like what was typed.
+          if (n > 0) found = found.filter(function (p) { return Math.max(likeness(p.title, query), likeness(p.original, query)) > 0.45; });
+          if (!found.length && n + 1 < tries.length) { attempt(n + 1); return; }
+          finish(err, rank(found, query).slice(0, SEARCH_PROVIDERS + 5), null);
+        });
+      })(0);
     });
   }
 
