@@ -91,6 +91,63 @@ function call(uri, clientKey, done) {
   socket.on('close', function () { finish(null); });
 }
 
+// MARK: - System stats for the home screen (CPU, RAM, network), read from /proc, which Developer Mode apps can read.
+
+var fs = require('fs');
+var lastCpu = null, lastNet = null;
+
+function readText(path) {
+  try { return fs.readFileSync(path, 'utf8'); } catch (e) { return ''; }
+}
+
+/** {busy, total} jiffies from the first line of /proc/stat. */
+function cpuTimes() {
+  var f = readText('/proc/stat').split('\n')[0].split(/\s+/).slice(1).map(Number);
+  if (f.length < 4) return null;
+  var idle = f[3] + (f[4] || 0), total = 0;
+  for (var i = 0; i < f.length; i++) total += f[i] || 0;
+  return {busy: total - idle, total: total};
+}
+
+function memory() {
+  var m = readText('/proc/meminfo'), total = /MemTotal:\s+(\d+)/.exec(m), avail = /MemAvailable:\s+(\d+)/.exec(m);
+  var swap = /SwapTotal:\s+(\d+)/.exec(m), swapFree = /SwapFree:\s+(\d+)/.exec(m);
+  if (!total || !avail) return null;
+  return {totalMb: Math.round(total[1] / 1024), usedMb: Math.round((total[1] - avail[1]) / 1024),
+    swapTotalMb: swap ? Math.round(swap[1] / 1024) : 0,
+    swapUsedMb: swap && swapFree ? Math.round((swap[1] - swapFree[1]) / 1024) : 0};
+}
+
+/** The busiest real interface: its kind, whether it's up, and bytes received + sent. */
+function network() {
+  var best = null;
+  readText('/proc/net/dev').split('\n').slice(2).forEach(function (line) {
+    var m = /^\s*([^:]+):\s*(\d+)(?:\s+\d+){7}\s+(\d+)/.exec(line);
+    if (!m || !/^(eth|wlan|wlp|enp)/.test(m[1])) return;
+    var bytes = +m[2] + +m[3];
+    if (!best || bytes > best.bytes) best = {name: m[1], bytes: bytes};
+  });
+  if (!best) return null;
+  var up = readText('/sys/class/net/' + best.name + '/operstate').trim() !== 'down';
+  return {kind: /^(eth|enp)/.test(best.name) ? 'ethernet' : 'wifi', up: up, bytes: best.bytes};
+}
+
+service.register('stats', function (message) {
+  var now = Date.now(), cpu = cpuTimes(), net = network(), out = {returnValue: true, mem: memory()};
+  if (cpu && lastCpu && cpu.total > lastCpu.total) {
+    out.cpu = Math.round((cpu.busy - lastCpu.busy) / (cpu.total - lastCpu.total) * 100);
+  }
+  if (net) {
+    out.net = {kind: net.kind, up: net.up};
+    if (lastNet && now > lastNet.at && net.bytes >= lastNet.bytes) {
+      out.net.kbps = Math.round((net.bytes - lastNet.bytes) * 8 / (now - lastNet.at));
+    }
+    lastNet = {bytes: net.bytes, at: now};
+  }
+  lastCpu = cpu;
+  message.respond(out);
+});
+
 service.register('ssap', function (message) {
   var p = message.payload || {};
   // Only the app list, the one call the page makes: nothing else goes to the TV's API, nor gets its client key.

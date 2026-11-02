@@ -510,10 +510,27 @@ var TV = (function () {
      */
     canOpenSettings: !tizen2 && !tizen34,
 
+    /**
+     * CPU (%), memory and network from the app's service on LG: done({cpu, mem: {usedMb, totalMb}, net: {kind, up,
+     * kbps}}), parts missing until a second reading; null elsewhere. The browser preview gets made-up numbers.
+     */
+    stats: function (done) {
+      if (!webos) {
+        if (samsung) { done(null); return; }
+        done({cpu: 18 + Math.round(Math.random() * 20), mem: {usedMb: 1080, totalMb: 1223, swapUsedMb: 470, swapTotalMb: 900},
+              net: {kind: 'wifi', up: true, kbps: Math.round(Math.random() * 4000)}});
+        return;
+      }
+      luna('luna://' + self + '.service/stats', {}, done);
+    },
+
     /** Installed apps, as the TV's launcher lists them: [{id, title, icon, color}]. */
     apps: function (done) {
       if (samsung) { samsungApps(done); return; }
       if (!webos) {
+        // A preview built with webos/apps.py's list shows that TV's apps and icons instead of the samples.
+        var preview = (window.CONFIG && CONFIG.installedApps) || [];
+        if (preview.length) { done(preview); return; }
         done(SAMPLE.map(function (s) { return {id: s[0], title: s[1], icon: '', color: s[2]}; }));
         return;
       }
