@@ -61,7 +61,11 @@ var Prefs = (function () {
   var KEY = 'fmtv.prefs';
   var v = {};
   try { v = JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) {}
-  function save() { try { localStorage.setItem(KEY, JSON.stringify(v)); } catch (e) {} }
+  var savedListeners = [];
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(v)); } catch (e) {}
+    for (var i = 0; i < savedListeners.length; i++) savedListeners[i]();
+  }
   function pick(name, fallback) { return v[name] === undefined ? fallback : v[name]; }
   return {
     version: 0,
@@ -104,6 +108,10 @@ var Prefs = (function () {
     },
     openPicks: function () { return pick('openPicks', CONFIG.openPicksIn === 'nuvio' ? 'nuvio' : 'apps'); },
     set: function (name, value) { v[name] = value; save(); this.version++; },
+    /** fn() after every saved change (the backup listens). */
+    onSave: function (fn) { savedListeners.push(fn); },
+    /** Everything the person set, as stored: what the backup keeps. */
+    dump: function () { return JSON.stringify(v); },
     setCoin: function (i, on) {
       var c = (pick('coins', null) || [true, true, true, true]).slice();
       c[i] = on;

@@ -207,6 +207,24 @@ service.register('football', function (message) {
   });
 });
 
+// MARK: - Backup of the settings in a file the computer can copy (webos/backup.py), so a reinstall keeps them
+
+var BACKUP = '/media/developer/temp/freemytv-backup.json';
+
+service.register('backup', function (message) {
+  var p = message.payload || {};
+  if (p.action === 'save') {
+    var data = String(p.data || '');
+    try { JSON.parse(data); } catch (e) { message.respond({returnValue: false, errorText: 'not JSON'}); return; }
+    if (data.length > 100000) { message.respond({returnValue: false, errorText: 'too big'}); return; }
+    fs.writeFile(BACKUP, data, function (err) { message.respond({returnValue: !err}); });
+  } else {
+    fs.readFile(BACKUP, 'utf8', function (err, data) {
+      message.respond(err ? {returnValue: true, data: ''} : {returnValue: true, data: data});
+    });
+  }
+});
+
 service.register('ssap', function (message) {
   var p = message.payload || {};
   // Only the app list, the one call the page makes: nothing else goes to the TV's API, nor gets its client key.

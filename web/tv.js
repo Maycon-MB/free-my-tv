@@ -524,6 +524,12 @@ var TV = (function () {
       luna('luna://' + self + '.service/stats', {}, done);
     },
 
+    /** The settings' backup file on the TV: save(text) or load; done({data}) or null (not on LG). */
+    backup: function (action, data, done) {
+      if (!webos) { if (done) done(null); return; }
+      luna('luna://' + self + '.service/backup', {action: action, data: data || ''}, done || null);
+    },
+
     /** Matches for teams [{league, id}] from the app's service: done({teams: [...]}) or null (not on LG). */
     football: function (teams, done) {
       if (!webos) { done(null); return; }

@@ -695,6 +695,27 @@
     TV.stats(showStats);
   }
 
+  // MARK: - Backup: every change goes to a file on the TV; a fresh install (nothing stored yet) restores from it
+
+  var backupTimer = 0;
+
+  function backupSoon() {
+    clearTimeout(backupTimer);
+    backupTimer = setTimeout(function () { TV.backup('save', Prefs.dump()); }, 3000);
+  }
+
+  function restoreBackup() {
+    var empty = true;
+    try { empty = !localStorage.getItem('fmtv.prefs'); } catch (e) {}
+    if (!empty) return;
+    TV.backup('load', '', function (res) {
+      var data = res && res.data;
+      if (!data) return;
+      try { JSON.parse(data); localStorage.setItem('fmtv.prefs', data); } catch (e) { return; }
+      location.reload();
+    });
+  }
+
   // MARK: - Football: the followed teams' live, next or last match beside the tabs
 
   var TEAMS = [{league: 'bra.1', id: '819'}];   // Flamengo; ESPN ids, league slug as in its API
@@ -2203,6 +2224,8 @@
   applyDim();
   tickClock();
   drawStars();
+  restoreBackup();
+  Prefs.onSave(backupSoon);
   pollFootball();
   pollStats();
   setInterval(pollStats, STATS_EVERY);
