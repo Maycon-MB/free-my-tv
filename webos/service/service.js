@@ -29,29 +29,18 @@ function frame(text) {
   return Buffer.concat([buffer(n < 126 ? [0x81, 0x80 | n] : [0x81, 0xfe, n >> 8, n & 0xff]), mask, data]);
 }
 
-/** done({clientKey, payload}), {refused: true} when the person said no on the TV, or null. */
-function call(uri, clientKey, params, done) {
-  var socket = net.connect(3000, '127.0.0.1'), buf = buffer([]), open = false, text = '', finished = false;
-  var timer = setTimeout(function () { finish(null); }, 90000);   // time to answer the TV's prompt
-  function finish(result) {
-    if (finished) return;
-    finished = true;
-    clearTimeout(timer);
+/**
+ * A connection to the TV's remote control API, registered with this app's permissions (the TV asks the person
+ * once). on.registered(clientKey), on.message(m) for everything after, on.end() when it closes. Returns send/close.
+ */
+function ssapSocket(clientKey, on) {
+  var socket = net.connect(3000, '127.0.0.1'), buf = buffer([]), open = false, text = '', ended = false;
+  function send(obj) { socket.write(frame(JSON.stringify(obj))); }
+  function end() {
+    if (ended) return;
+    ended = true;
     socket.destroy();
-    done(result);
-  }
-  function send(obj) {
-    socket.write(frame(JSON.stringify(obj)));
-  }
-  function onMessage(m) {
-    if (m.type === 'registered') {
-      clientKey = m.payload['client-key'];
-      send({type: 'request', id: 'call', uri: 'ssap://' + uri, payload: params || {}});
-    } else if (m.id === 'call') {
-      finish(m.type === 'error' ? null : {clientKey: clientKey, payload: m.payload});
-    } else if (m.type === 'error') {
-      finish(m.id === 'register' ? {refused: true} : null);
-    }
+    on.end();
   }
   socket.on('connect', function () {
     socket.write('GET / HTTP/1.1\r\nHost: 127.0.0.1:3000\r\nOrigin: file://\r\nUpgrade: websocket\r\n' +
@@ -60,11 +49,11 @@ function call(uri, clientKey, params, done) {
   socket.on('data', function (chunk) {
     buf = Buffer.concat([buf, chunk]);
     if (!open) {
-      var end = buf.toString('binary').indexOf('\r\n\r\n');
-      if (end < 0) return;
-      if (!/^HTTP\/1\.1 101/.test(buf.toString('utf8', 0, 12))) { finish(null); return; }
+      var head = buf.toString('binary').indexOf('\r\n\r\n');
+      if (head < 0) return;
+      if (!/^HTTP\/1\.1 101/.test(buf.toString('utf8', 0, 12))) { end(); return; }
       open = true;
-      buf = buf.slice(end + 4);
+      buf = buf.slice(head + 4);
       var payload = {forcePairing: false, pairingType: 'PROMPT',
         manifest: {manifestVersion: 1, appVersion: '1.0', permissions: PERMISSIONS}};
       if (clientKey) payload['client-key'] = clientKey;
@@ -85,18 +74,44 @@ function call(uri, clientKey, params, done) {
       if (buf.length < off + n) return;
       var data = buf.slice(off, off + n);
       buf = buf.slice(off + n);
-      if (op === 8) { finish(null); return; }
+      if (op === 8) { end(); return; }
       if (op !== 1 && op !== 0) continue;
       text += data.toString('utf8');
       if (!fin) continue;
       var m = null;
       try { m = JSON.parse(text); } catch (e) {}
       text = '';
-      if (m) onMessage(m);
+      if (!m) continue;
+      if (m.type === 'registered') on.registered(m.payload['client-key']);
+      else on.message(m);
     }
   });
-  socket.on('error', function () { finish(null); });
-  socket.on('close', function () { finish(null); });
+  socket.on('error', end);
+  socket.on('close', end);
+  return {send: send, close: end};
+}
+
+/** done({clientKey, payload}), {refused: true} when the person said no on the TV, or null. */
+function call(uri, clientKey, params, done) {
+  var finished = false, timer = setTimeout(function () { finish(null); }, 90000);   // time to answer the TV's prompt
+  function finish(result) {
+    if (finished) return;
+    finished = true;
+    clearTimeout(timer);
+    conn.close();
+    done(result);
+  }
+  var conn = ssapSocket(clientKey, {
+    registered: function (key) {
+      clientKey = key;
+      conn.send({type: 'request', id: 'call', uri: 'ssap://' + uri, payload: params || {}});
+    },
+    message: function (m) {
+      if (m.id === 'call') finish(m.type === 'error' ? null : {clientKey: clientKey, payload: m.payload});
+      else if (m.type === 'error') finish(m.id === 'register' ? {refused: true} : null);
+    },
+    end: function () { finish(null); }
+  });
 }
 
 // MARK: - System stats for the home screen (CPU, RAM, network), read from /proc, which Developer Mode apps can read.
@@ -256,7 +271,7 @@ var keepAsking = false;
 
 /** Keeps the service alive exactly while a timer, a reminder or a match watch is pending. */
 function hold() {
-  var need = !!(sleepTimer || watchTimer || reminderTimer || phone.server);
+  var need = !!(sleepTimer || watchTimer || reminderTimer || phone.server || back.on);
   if (!service.activityManager) return;
   if (need && !keepAlive && !keepAsking) {
     keepAsking = true;
@@ -776,3 +791,60 @@ function qrEncode(text) {
   // One string per row, '1' dark: small to send to the page, which draws it.
   return m.map(function (row) { return row.map(function (d) { return d ? '1' : '0'; }).join(''); });
 }
+
+// MARK: - Back to Free My TV: whenever LG's home comes up (leaving an app, Home, anything), Free My TV comes back,
+// since it replaces that home. Home Settings can turn it off.
+
+var LG_HOME = /^com\.webos\.app\.home$/;
+var back = {on: false, conn: null, key: null, prev: '', at: 0, retry: null, log: []};
+
+function backLog(text) {
+  back.log.push(new Date().toISOString().slice(11, 19) + ' ' + text);
+  if (back.log.length > 30) back.log.shift();
+}
+
+function launchHome() {
+  service.call('luna://com.webos.applicationManager/launch', {id: 'io.freemytv'}, function () {});
+}
+
+function onForeground(appId) {
+  if (!appId) return;   // empty while switching
+  backLog(back.prev + ' -> ' + appId);
+  if (LG_HOME.test(appId) && Date.now() - back.at > 3000) {   // once per visit, even if the home reports twice
+    back.at = Date.now();
+    launchHome();
+  }
+  back.prev = appId;
+}
+
+function watchForeground() {
+  if (!back.on || back.conn) return;
+  back.conn = ssapSocket(back.key, {
+    registered: function (key) {
+      back.key = key;
+      back.conn.send({type: 'subscribe', id: 'fg', uri: 'ssap://com.webos.applicationManager/getForegroundAppInfo'});
+    },
+    message: function (m) {
+      if (m.id === 'fg' && m.payload) onForeground(m.payload.appId);
+      else if (m.type === 'error') backLog('erro: ' + (m.error || ''));
+    },
+    end: function () {
+      back.conn = null;
+      if (back.on) back.retry = setTimeout(watchForeground, 10000);   // the TV's API restarts now and then
+    }
+  });
+}
+
+/** on: turn the watch on or off; the answer has the last transitions seen, for checking it on a TV. */
+service.register('backHome', function (message) {
+  var p = message.payload || {};
+  if (p.clientKey) back.key = p.clientKey;
+  if (p.on === true && !back.on) { back.on = true; watchForeground(); }
+  if (p.on === false && back.on) {
+    back.on = false;
+    clearTimeout(back.retry);
+    if (back.conn) back.conn.close();
+  }
+  hold();
+  message.respond({returnValue: true, on: back.on, watching: !!back.conn, log: back.log.slice(-10)});
+});

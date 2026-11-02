@@ -355,11 +355,11 @@
 
   // MARK: - Focus
 
-  var Z = {TOP: 'top', CARDS: 'cards', SHELF: 'shelf', DRAWER: 'drawer', APPS: 'apps', SETTINGS: 'settings', EDIT: 'edit', LANG: 'lang', CITY: 'city', KEY: 'key', ABOUT: 'about', SEARCH: 'search', TEAMS: 'teams'};
+  var Z = {TOP: 'top', CARDS: 'cards', SHELF: 'shelf', DRAWER: 'drawer', APPS: 'apps', SETTINGS: 'settings', EDIT: 'edit', LANG: 'lang', CITY: 'city', KEY: 'key', ABOUT: 'about', SEARCH: 'search', TEAMS: 'teams', CTRL: 'ctrl'};
   var st = {zone: Z.SHELF, top: 0, tab: 0, card: 0, shelf: 0, drawer: 0, grid: 0, row: 0, edit: 0, lang: 0, city: 0, key: 0};
   var cards = [];
 
-  function sheetOpen() { return st.zone === Z.APPS || st.zone === Z.SETTINGS || st.zone === Z.EDIT || st.zone === Z.LANG || st.zone === Z.CITY || st.zone === Z.KEY || st.zone === Z.ABOUT || st.zone === Z.SEARCH || st.zone === Z.TEAMS; }
+  function sheetOpen() { return st.zone === Z.APPS || st.zone === Z.SETTINGS || st.zone === Z.EDIT || st.zone === Z.LANG || st.zone === Z.CITY || st.zone === Z.KEY || st.zone === Z.ABOUT || st.zone === Z.SEARCH || st.zone === Z.TEAMS || st.zone === Z.CTRL; }
 
   function updateFocus() {
     var i, list;
@@ -392,6 +392,7 @@
     focusRows($('keypick'), st.key, st.zone === Z.KEY);
     focusSearch();
     focusRows($('teampick'), tmRow, st.zone === Z.TEAMS);
+    focusRows($('controls'), ctrlRow, st.zone === Z.CTRL);
     setClass(body, 'drawer-open', st.zone === Z.DRAWER);
     followSoon();
   }
@@ -436,11 +437,12 @@
     var buttons = $('buttons');
     buttons.innerHTML = '';
     // Material Symbols Rounded (Apache 2.0) as vectors: sharp at any scale, one stroke weight for the four.
-    var defs = [['icons/sym-search.svg', 'Pesquisar'], ['icons/sym-live_tv.svg', tr('light|Live TV')],
-      ['icons/sym-settings_input_hdmi.svg', tr('HDMI Inputs')], ['icons/sym-settings.svg', tr('light|Settings')]];
+    var defs = [['icons/sym-search.svg', 'Pesquisar'], ['icons/sym-tune.svg', 'Controles'],
+      ['icons/sym-live_tv.svg', tr('light|Live TV')], ['icons/sym-settings_input_hdmi.svg', tr('HDMI Inputs')],
+      ['icons/sym-settings.svg', tr('light|Settings')]];
     for (var b = 0; b < defs.length; b++) {
       var r = el('button', 'round' + (b === defs.length - 1 ? ' last' : ''), buttons);
-      r.style.left = (1508 + 88 * b) + 'px';
+      r.style.left = (1420 + 88 * b) + 'px';
       sym(defs[b][0], r);
       el('div', 'tip', r, defs[b][1]);
       hover(r, Z.TOP, 3 + b);
@@ -842,6 +844,47 @@
     });
   }
 
+  // The Controls sheet (top button): what the remote has no button for.
+  var ctrlRow = 0;
+
+  function controlRows() {
+    return [
+      {label: 'Só o som (apaga a tela)', value: '›', run: function () { closeControls(); screenOff(); }},
+      {label: 'Timer para desligar', value: SLEEP_STEPS[sleepStep] ? SLEEP_STEPS[sleepStep] + ' min' : 'desligado',
+        step: function (d) { cycleSleep(d); renderControls(); }, run: function () { cycleSleep(1); renderControls(); }},
+      {label: 'Testar a internet', value: '›', run: function () { speedTest(); }}
+    ];
+  }
+
+  function renderControls() {
+    var box = $('controls').firstChild, rows = controlRows();
+    box.innerHTML = '';
+    el('div', 'title', box, 'Controles');
+    var list = el('div', 'list', box), holder = el('div', 'rows', list);
+    list.style.height = rows.length * 78 + 'px';
+    for (var i = 0; i < rows.length; i++) {
+      var row = el('div', 'row', holder, rows[i].label);
+      el('span', 'value', row, rows[i].value);
+      hover(row, Z.CTRL, i);
+    }
+    el('div', 'hint', box, 'OK escolhe · ← → muda o timer · Voltar fecha');
+    updateFocus();
+  }
+
+  function openControls() {
+    st.zone = Z.CTRL;
+    ctrlRow = 0;
+    renderControls();
+    setClass($('controls'), 'open', true);
+  }
+
+  function closeControls() {
+    setClass($('controls'), 'open', false);
+    st.zone = Z.TOP;
+    st.top = 4;
+    updateFocus();
+  }
+
   function speedTest() {
     toast('Testando a internet (baixa 10 MB)…');
     TV.service('speedTest', {}, function (res) {
@@ -849,8 +892,8 @@
     });
   }
 
-  function cycleSleep() {
-    sleepStep = (sleepStep + 1) % SLEEP_STEPS.length;
+  function cycleSleep(d) {
+    sleepStep = (sleepStep + (d < 0 ? -1 : 1) + SLEEP_STEPS.length) % SLEEP_STEPS.length;
     var minutes = SLEEP_STEPS[sleepStep];
     // A control call first, so the service has the TV's key and the person has allowed it.
     TV.control('audio/getStatus', {}, function () {
@@ -859,8 +902,6 @@
           : minutes ? 'A TV desliga em ' + minutes + ' min.' : 'Timer desligado.');
       });
     });
-    renderDrawer();
-    updateFocus();
   }
 
   // MARK: - Headlines and exchange rates: one quiet line at the top, a new headline every 10 s
@@ -1362,13 +1403,11 @@
     drawerItems = [];
     for (var i = 0; i < inputs.length; i++) {
       var x = inputs[i];
+      if (x.key !== 'live' && !x.connected) continue;   // a port with nothing plugged in is only in the way
       drawerItems.push({label: x.label || tr('Live TV'), symbol: x.symbol, off: !x.connected, run: launcher(x.id, x.label)});
     }
     drawerInputs = drawerItems.length;
     drawerItems.push({label: tr('All Apps'), symbol: 'apps', run: openApps});
-    drawerItems.push({label: 'Só o som', symbol: 'speaker', run: screenOff});
-    drawerItems.push({label: sleepLabel(), symbol: 'bedtime', run: cycleSleep});
-    drawerItems.push({label: 'Internet', symbol: 'wifi', run: speedTest});
     drawerItems.push({label: tr('Home Settings'), symbol: 'settings', run: openSettings});
     if (TV.canOpenSettings) drawerItems.push({label: tr('TV Settings'), symbol: 'tv_settings', run: tvSettings});
     var n = drawerItems.length, gap = 18, groupGap = 56, groups = drawerInputs > 0 && drawerInputs < n ? 2 : 1;
@@ -1545,6 +1584,8 @@
         step: function () { Prefs.set('hideAnimation', !Prefs.hideAnimation()); Data.refresh(); }},
       {label: 'Times', value: followed().map(function (t) { return t.name; }).join(', ') || 'nenhum', opens: true,
         step: function (d) { if (d >= 0) openTeams(); }},
+      {label: 'Voltar ao Free My TV', toggle: Prefs.get('backHome', true),
+        step: function () { Prefs.set('backHome', !Prefs.get('backHome', true)); TV.service('backHome', {on: Prefs.get('backHome', true)}); }},
       {label: 'Ordem dos apps', value: Prefs.get('shelfOrder', 'manual') === 'usage' ? 'Mais usados' : 'Manual',
         step: function () {
           Prefs.set('shelfOrder', Prefs.get('shelfOrder', 'manual') === 'usage' ? 'manual' : 'usage');
@@ -2209,8 +2250,9 @@
       case Z.TOP:
         if (st.top < 3) return;
         if (st.top === 3) openSearch();
-        else if (st.top === 4) { var live = liveTV(); if (live) launcher(live.id, tr('Live TV'))(); }
-        else if (st.top === 5) { st.zone = Z.SHELF; openDrawer(); st.drawer = 1 < drawerInputs ? 1 : 0; updateFocus(); }
+        else if (st.top === 4) openControls();
+        else if (st.top === 5) { var live = liveTV(); if (live) launcher(live.id, tr('Live TV'))(); }
+        else if (st.top === 6) { st.zone = Z.SHELF; openDrawer(); st.drawer = 1 < drawerInputs ? 1 : 0; updateFocus(); }
         else openSettings();
         return;
       case Z.CARDS:
@@ -2250,6 +2292,9 @@
       case Z.TEAMS:
         toggleTeam();
         return;
+      case Z.CTRL:
+        controlRows()[ctrlRow].run(1);
+        return;
     }
   }
 
@@ -2284,7 +2329,7 @@
         break;
       case Z.TOP:
         if (dx) {
-          st.top = Math.max(Data.hasKey() ? 0 : 3, Math.min(6, st.top + dx));   // without the picks the tabs can't hold focus
+          st.top = Math.max(Data.hasKey() ? 0 : 3, Math.min(7, st.top + dx));   // without the picks the tabs can't hold focus
           if (st.top < 3) selectTab(st.top);   // as on Apple TV: focusing a tab selects it
         } else if (dy > 0) {
           if (cards.length) { st.zone = Z.CARDS; st.card = Math.min(cards.length - 1, st.top < 3 ? 0 : cards.length - 1); }
@@ -2322,6 +2367,10 @@
       case Z.SEARCH:
         moveSearch(dx, dy);
         break;
+      case Z.CTRL:
+        if (dy) ctrlRow = Math.max(0, Math.min(controlRows().length - 1, ctrlRow + dy));
+        else if (dx && controlRows()[ctrlRow].step) controlRows()[ctrlRow].step(dx);
+        break;
       case Z.TEAMS:
         if (dy) tmRow = Math.max(0, Math.min(tmList.length - 1, tmRow + dy));
         else if (dx) { tmLeague = (tmLeague + dx + LEAGUES.length) % LEAGUES.length; loadTeams(); }
@@ -2344,6 +2393,7 @@
     if (st.zone === Z.ABOUT) { closeAbout(); return; }
     if (st.zone === Z.SEARCH) { closeSearch(); return; }
     if (st.zone === Z.TEAMS) { closeTeams(); return; }
+    if (st.zone === Z.CTRL) { closeControls(); return; }
     if (sheetOpen()) { closeSheets(); return; }
     if (st.zone === Z.DRAWER) { closeDrawer(); return; }
     if (st.zone !== Z.SHELF && shelf.length) { st.zone = Z.SHELF; updateFocus(); return; }
@@ -2354,7 +2404,7 @@
   /** The pointer focuses what it's over (the Magic Remote, or a mouse when previewing). */
   function hover(node, zone, index) {
     node.onmouseover = function () {
-      if (moving || saverOn || (sheetOpen() !== (zone === Z.APPS || zone === Z.SETTINGS || zone === Z.EDIT || zone === Z.LANG || zone === Z.CITY || zone === Z.KEY || zone === Z.ABOUT || zone === Z.SEARCH || zone === Z.TEAMS))) return;
+      if (moving || saverOn || (sheetOpen() !== (zone === Z.APPS || zone === Z.SETTINGS || zone === Z.EDIT || zone === Z.LANG || zone === Z.CITY || zone === Z.KEY || zone === Z.ABOUT || zone === Z.SEARCH || zone === Z.TEAMS || zone === Z.CTRL))) return;
       if (zone === Z.DRAWER && st.zone !== Z.DRAWER) return;
       if (zone !== Z.DRAWER && st.zone === Z.DRAWER && zone !== Z.SHELF) return;
       if (zone === Z.TOP && index < 3 && !Data.hasKey()) return;   // the tabs are hidden without the picks
@@ -2371,6 +2421,7 @@
       else if (zone === Z.CITY) st.city = index;
       else if (zone === Z.KEY) st.key = index;
       else if (zone === Z.TEAMS) tmRow = index;
+      else if (zone === Z.CTRL) ctrlRow = index;
       else if (zone === Z.SEARCH) {
         srPart = Math.floor(index / 1000);
         if (srPart === 1) srChip = index % 1000;
@@ -2662,6 +2713,8 @@
   applyAccent();
   restoreBackup();
   Prefs.onSave(backupSoon);
+  // LG's home never stays: the service brings Free My TV back (Home Settings can turn it off).
+  TV.service('backHome', {on: Prefs.get('backHome', true)});
   pollF1();
   pollFootball();
   pollStats();
