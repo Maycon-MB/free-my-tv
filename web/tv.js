@@ -557,6 +557,14 @@ var TV = (function () {
       luna('luna://' + self + '.service/watchGoals', {teams: teams, clientKey: key}, null);
     },
 
+    /** A call to one of the service's methods (info, speedTest, remind, phone, f1): done(result) or null off LG. */
+    service: function (method, params, done) {
+      if (!webos) { if (done) done(null); return; }
+      var p = params || {};
+      if (method === 'remind') { try { p.clientKey = localStorage.getItem(SSAP_KEY); } catch (e) {} }
+      luna('luna://' + self + '.service/' + method, p, done || null);
+    },
+
     /** Matches for teams [{league, id}] from the app's service: done({teams: [...]}) or null (not on LG). */
     football: function (teams, done) {
       if (!webos) { done(null); return; }

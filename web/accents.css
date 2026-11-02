@@ -21,6 +21,8 @@ body.accent-blue #perf .pval.bad { color: #7FB0FF; }
 body.accent-blue #perf .pfill.alarm { background: #3B82F6; }
 body.accent-blue #football .live { border-color: #3B82F6; }
 body.accent-blue #football .live .when { color: #7FB0FF; }
+body.accent-blue #perf .side.bad { color: #7FB0FF; }
+body.accent-blue #news .src { color: #7FB0FF; }
 body.accent-green.night .tab.focus { background: #22C55E; }
 body.accent-green.night .round.focus { background: #22C55E; border-color: #22C55E; }
 body.accent-green.night .round.focus .tip { color: #6EE7A0; }
@@ -43,6 +45,8 @@ body.accent-green #perf .pval.bad { color: #6EE7A0; }
 body.accent-green #perf .pfill.alarm { background: #22C55E; }
 body.accent-green #football .live { border-color: #22C55E; }
 body.accent-green #football .live .when { color: #6EE7A0; }
+body.accent-green #perf .side.bad { color: #6EE7A0; }
+body.accent-green #news .src { color: #6EE7A0; }
 body.accent-purple.night .tab.focus { background: #8B5CF6; }
 body.accent-purple.night .round.focus { background: #8B5CF6; border-color: #8B5CF6; }
 body.accent-purple.night .round.focus .tip { color: #B9A0FF; }
@@ -65,6 +69,8 @@ body.accent-purple #perf .pval.bad { color: #B9A0FF; }
 body.accent-purple #perf .pfill.alarm { background: #8B5CF6; }
 body.accent-purple #football .live { border-color: #8B5CF6; }
 body.accent-purple #football .live .when { color: #B9A0FF; }
+body.accent-purple #perf .side.bad { color: #B9A0FF; }
+body.accent-purple #news .src { color: #B9A0FF; }
 body.accent-orange.night .tab.focus { background: #F97316; }
 body.accent-orange.night .round.focus { background: #F97316; border-color: #F97316; }
 body.accent-orange.night .round.focus .tip { color: #FFAB70; }
@@ -87,6 +93,8 @@ body.accent-orange #perf .pval.bad { color: #FFAB70; }
 body.accent-orange #perf .pfill.alarm { background: #F97316; }
 body.accent-orange #football .live { border-color: #F97316; }
 body.accent-orange #football .live .when { color: #FFAB70; }
+body.accent-orange #perf .side.bad { color: #FFAB70; }
+body.accent-orange #news .src { color: #FFAB70; }
 body.accent-yellow.night .tab.focus { background: #FFE100; color: #1D1D1B; }
 body.accent-yellow.night .round.focus { background: #FFE100; border-color: #FFE100; color: #1D1D1B; }
 body.accent-yellow.night .round.focus .tip { color: #FFE97A; }
@@ -109,3 +117,5 @@ body.accent-yellow #perf .pval.bad { color: #FFE97A; }
 body.accent-yellow #perf .pfill.alarm { background: #FFE100; color: #1D1D1B; }
 body.accent-yellow #football .live { border-color: #FFE100; }
 body.accent-yellow #football .live .when { color: #FFE97A; }
+body.accent-yellow #perf .side.bad { color: #FFE97A; }
+body.accent-yellow #news .src { color: #FFE97A; }

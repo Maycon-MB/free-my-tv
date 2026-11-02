@@ -367,3 +367,172 @@ service.register('renewDevMode', function (message) {
     check();
   });
 });
+
+// MARK: - Headlines (ge and g1 RSS) and exchange rates (AwesomeAPI), cached for 10 minutes
+
+var HEADLINE_FEEDS = [['GE', 'https://ge.globo.com/rss/ge/futebol/'], ['G1', 'https://g1.globo.com/rss/g1/']];
+var infoCache = {at: 0, data: null};
+
+function getText(url, done) {
+  var req = https.get(url, function (res) {
+    var body = '';
+    res.setEncoding('utf8');
+    res.on('data', function (c) { if (body.length < 500000) body += c; });
+    res.on('end', function () { done(body); });
+  });
+  req.on('error', function () { done(''); });
+  req.setTimeout(10000, function () { req.abort(); });
+}
+
+/** Item titles of an RSS feed, plain text (CDATA and entities undone, tags dropped). */
+function titles(xml) {
+  var out = [], re = /<item>[\s\S]*?<title>([\s\S]*?)<\/title>/g, m;
+  while ((m = re.exec(xml)) && out.length < 8) {
+    var t = m[1].replace(/<!\[CDATA\[|\]\]>/g, '').replace(/<[^>]*>/g, '').replace(/&quot;/g, '"')
+      .replace(/&#39;|&apos;/g, "'").replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
+    if (t) out.push(t.slice(0, 140));
+  }
+  return out;
+}
+
+service.register('info', function (message) {
+  if (infoCache.data && Date.now() - infoCache.at < 600000) { message.respond(infoCache.data); return; }
+  var out = {returnValue: true, headlines: [], rates: {}}, left = HEADLINE_FEEDS.length + 1;
+  function finish() {
+    if (--left) return;
+    infoCache = {at: Date.now(), data: out};
+    message.respond(out);
+  }
+  HEADLINE_FEEDS.forEach(function (feed) {
+    getText(feed[1], function (xml) {
+      titles(xml).forEach(function (t) { out.headlines.push({source: feed[0], title: t}); });
+      finish();
+    });
+  });
+  getText('https://economia.awesomeapi.com.br/json/last/USD-BRL,EUR-BRL', function (body) {
+    try {
+      var o = JSON.parse(body);
+      out.rates = {USD: +o.USDBRL.bid, EUR: +o.EURBRL.bid};
+    } catch (e) {}
+    finish();
+  });
+});
+
+// MARK: - Internet speed: a 10 MB download from Cloudflare's speed test, timed (nothing is kept)
+
+service.register('speedTest', function (message) {
+  var started = Date.now(), bytes = 0, done = false;
+  function finish(ok) {
+    if (done) return;
+    done = true;
+    var secs = (Date.now() - started) / 1000;
+    message.respond({returnValue: ok && bytes > 0, mbps: ok ? Math.round(bytes * 8 / secs / 1e5) / 10 : 0});
+  }
+  var req = https.get('https://speed.cloudflare.com/__down?bytes=10000000', function (res) {
+    res.on('data', function (c) { bytes += c.length; });
+    res.on('end', function () { finish(true); });
+  });
+  req.on('error', function () { finish(false); });
+  req.setTimeout(30000, function () { req.abort(); finish(bytes > 1e6); });
+});
+
+// MARK: - Match reminder: a toast 10 minutes before a followed team's next match, on any app
+
+var reminderTimer = null, reminderAt = 0;
+
+service.register('remind', function (message) {
+  var p = message.payload || {}, at = Date.parse(p.date) - 10 * 60000, text = String(p.text || '').slice(0, 80);
+  if (p.clientKey) lastKey = p.clientKey;
+  if (at !== reminderAt) {
+    if (reminderTimer) clearTimeout(reminderTimer);
+    reminderTimer = null;
+    reminderAt = 0;
+    // Only within 3 hours: the activity that keeps the service alive shouldn't last for days.
+    if (at > Date.now() && at - Date.now() < 3 * 3600000 && text) {
+      reminderAt = at;
+      reminderTimer = setTimeout(function () { reminderTimer = null; toast(text); hold(false); }, at - Date.now());
+      hold(true);
+    }
+  }
+  message.respond({returnValue: true, at: reminderAt});
+});
+
+// MARK: - Typing from the phone: while the search is open, a page on the home network takes the text, after the
+// 4-digit code shown on the TV. Nothing else is served, and it stops when the search closes.
+
+var http = require('http'), os = require('os');
+var phone = {server: null, code: '', text: '', port: 8770};
+
+function lanAddress() {
+  var nets = os.networkInterfaces();
+  for (var name in nets) {
+    for (var i = 0; i < nets[name].length; i++) {
+      var a = nets[name][i];
+      if (a.family === 'IPv4' && !a.internal && /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(a.address)) return a.address;
+    }
+  }
+  return '';
+}
+
+var PHONE_PAGE = '<!doctype html><meta name=viewport content="width=device-width,initial-scale=1"><title>Free My TV</title>' +
+  '<style>body{font:18px system-ui;background:#0B0B0D;color:#F2F2F3;margin:24px}input,button{font:inherit;width:100%;' +
+  'box-sizing:border-box;padding:14px;margin:8px 0;border-radius:12px;border:1px solid #333;background:#141417;color:inherit}' +
+  'button{background:#E5484D;border:0;font-weight:700}</style><h2>Pesquisar na TV</h2>' +
+  '<form method=post><input name=code inputmode=numeric placeholder="Código da TV (4 dígitos)" required>' +
+  '<input name=q placeholder="Filme ou série" required autofocus><button>Enviar para a TV</button></form>';
+
+function startPhone() {
+  phone.code = String(1000 + Math.floor(Math.random() * 9000));
+  phone.text = '';
+  if (phone.server) return;
+  phone.server = http.createServer(function (req, res) {
+    if (req.method === 'POST') {
+      var body = '';
+      req.on('data', function (c) { if (body.length < 2000) body += c; });
+      req.on('end', function () {
+        var form = require('querystring').parse(body), ok = form.code === phone.code && form.q;
+        if (ok) phone.text = String(form.q).slice(0, 100);
+        res.writeHead(200, {'Content-Type': 'text/html; charset=utf-8'});
+        res.end(PHONE_PAGE.replace('<h2>', ok ? '<p>Enviado. Pode digitar outro.</p><h2>' : '<p>Código errado.</p><h2>'));
+      });
+      return;
+    }
+    res.writeHead(200, {'Content-Type': 'text/html; charset=utf-8'});
+    res.end(PHONE_PAGE);
+  });
+  phone.server.on('error', function () { phone.server = null; });
+  phone.server.listen(phone.port);
+}
+
+function stopPhone() {
+  if (phone.server) { phone.server.close(); phone.server = null; }
+  phone.code = '';
+  phone.text = '';
+}
+
+/** start: the address and code to show; poll: the text typed since the last poll; stop. */
+service.register('phone', function (message) {
+  var p = message.payload || {};
+  if (p.action === 'start') {
+    startPhone();
+    message.respond({returnValue: !!lanAddress(), url: 'http://' + lanAddress() + ':' + phone.port, code: phone.code});
+  } else if (p.action === 'poll') {
+    var text = phone.text;
+    phone.text = '';
+    message.respond({returnValue: true, text: text, on: !!phone.server});
+  } else {
+    stopPhone();
+    message.respond({returnValue: true});
+  }
+});
+
+// MARK: - Formula 1: the next Grand Prix from ESPN's calendar
+
+service.register('f1', function (message) {
+  getJson('https://site.api.espn.com/apis/site/v2/sports/racing/f1/scoreboard', function (d) {
+    var cal = (d && d.leagues && d.leagues[0] && d.leagues[0].calendar) || [], now = Date.now(), next = null;
+    for (var i = 0; i < cal.length && !next; i++) if (Date.parse(cal[i].endDate) > now) next = cal[i];
+    var name = next ? String(next.label || '') : '', m = /(\S+(?: \S+)?) Grand Prix$/.exec(name);
+    message.respond({returnValue: true, race: next ? {name: m ? m[1] : name.slice(0, 30), date: next.endDate} : null});
+  });
+});

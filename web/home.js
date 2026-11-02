@@ -843,6 +843,13 @@
     });
   }
 
+  function speedTest() {
+    toast('Testando a internet (baixa 10 MB)…');
+    TV.service('speedTest', {}, function (res) {
+      toast(res && res.mbps ? 'Internet da TV: ' + String(res.mbps).replace('.', ',') + ' Mb/s' : 'Não deu para testar agora.');
+    });
+  }
+
   function cycleSleep() {
     sleepStep = (sleepStep + 1) % SLEEP_STEPS.length;
     var minutes = SLEEP_STEPS[sleepStep];
@@ -854,6 +861,30 @@
     });
     renderDrawer();
     updateFocus();
+  }
+
+  // MARK: - Headlines and exchange rates: one quiet line at the top, a new headline every 10 s
+
+  var NEWS_EVERY = 10000, INFO_EVERY = 10 * 60000, news = [], newsAt = 0, rates = null;
+
+  function money(v) { return v ? v.toFixed(2).replace('.', ',') : '—'; }
+
+  function showNews() {
+    var box = $('news');
+    if (!box || document.hidden) return;
+    box.innerHTML = '';
+    if (news.length) {
+      var h = news[newsAt++ % news.length];
+      el('span', 'src', box, h.source);
+      el('span', 'title', box, h.title);
+    }
+    if (rates && rates.USD) el('span', 'rates', box, 'USD ' + money(rates.USD) + '  ·  EUR ' + money(rates.EUR));
+  }
+
+  function pollInfo() {
+    TV.service('info', {}, function (res) {
+      if (res) { news = res.headlines || []; rates = res.rates || null; showNews(); }
+    });
   }
 
   // MARK: - Football: the followed teams' live, next or last match beside the tabs
@@ -900,6 +931,28 @@
     clearTimeout(footballTimer);
     footballTimer = setTimeout(pollFootball, live ? FOOTBALL_LIVE_EVERY : FOOTBALL_EVERY);
     if (live) TV.watchGoals(TEAMS);   // the service keeps watching while another app is in front
+    var soon = teams[0] && teams[0].next;
+    if (soon && soon.state === 'pre' && soon.home && soon.away) {
+      TV.service('remind', {date: soon.date, text: soon.home.abbr + ' × ' + soon.away.abbr + ' começa em 10 minutos'});
+    }
+    if (f1Race) footballChip(box, 'F1 · GP ' + f1Race.name, f1When(f1Race.date));
+  }
+
+  var f1Race = null;
+
+  function f1When(date) {
+    var d = new Date(date);
+    return WEEKDAYS[d.getDay()] + ' ' + two(d.getDate()) + '/' + two(d.getMonth() + 1);
+  }
+
+  function footballChip(box, text, when) {
+    var chip = el('div', 'match f1', box);
+    el('span', 'teams', chip, text);
+    el('span', 'when', chip, when);
+  }
+
+  function pollF1() {
+    TV.service('f1', {}, function (res) { f1Race = res && res.race; });
   }
 
   function pollFootball() {
@@ -1033,6 +1086,7 @@
     var chips = el('div', 'chips', head), labels = chipLabels(), active = [srKind > 0, srMine, srGenre > 0];
     for (var c = 0; c < labels.length; c++) hover(el('div', 'chip' + (active[c] ? ' on' : ''), chips, labels[c]), Z.SEARCH, 1000 + c);
     el('div', 'sstatus', head, srStatus);
+    el('div', 'phone', head, phoneHint);
     var grid = el('div', 'sgrid', page);
     for (var i = 0; i < srShown.length; i++) {
       var p = srShown[i], item = el('div', 'sitem', grid), app = p.app && Data.appFor(p.app);
@@ -1072,9 +1126,38 @@
     renderSearch();
     setClass($('searchpage'), 'open', true);
     openField('searchpage');
+    startPhone();
+  }
+
+  // Typing from the phone: the service serves a small page on the home network while the search is open.
+  var phoneTimer = 0, phoneHint = '';
+
+  function startPhone() {
+    TV.service('phone', {action: 'start'}, function (res) {
+      if (!res || !res.url || st.zone !== Z.SEARCH) return;
+      phoneHint = 'No celular: ' + res.url.replace('http://', '') + '  ·  código ' + res.code;
+      var hint = $('searchpage').querySelector('.phone');
+      if (hint) hint.textContent = phoneHint;
+      clearInterval(phoneTimer);
+      phoneTimer = setInterval(function () {
+        TV.service('phone', {action: 'poll'}, function (r) {
+          if (!r || !r.text || st.zone !== Z.SEARCH) return;
+          var f = fieldOf('searchpage');
+          if (f) f.value = r.text;
+          runSearch();
+        });
+      }, 2000);
+    });
+  }
+
+  function stopPhone() {
+    clearInterval(phoneTimer);
+    phoneHint = '';
+    TV.service('phone', {action: 'stop'});
   }
 
   function closeSearch() {
+    stopPhone();
     closeField('searchpage');
     setClass($('searchpage'), 'open', false);
     $('searchpage').innerHTML = '';   // up to 15 decoded posters stay in RAM otherwise
@@ -1176,6 +1259,7 @@
     drawerItems.push({label: 'Apagar tela', symbol: 'tv', run: screenOff});
     drawerItems.push({label: 'Mudo', symbol: 'speaker', run: toggleMute});
     drawerItems.push({label: sleepLabel(), symbol: 'bedtime', run: cycleSleep});
+    drawerItems.push({label: 'Testar internet', symbol: 'wifi', run: speedTest});
     drawerItems.push({label: tr('Home Settings'), symbol: 'settings', run: openSettings});
     if (TV.canOpenSettings) drawerItems.push({label: tr('TV Settings'), symbol: 'tv_settings', run: tvSettings});
     var n = drawerItems.length, gap = 18, groupGap = 56, groups = drawerInputs > 0 && drawerInputs < n ? 2 : 1;
@@ -2451,8 +2535,13 @@
   applyAccent();
   restoreBackup();
   Prefs.onSave(backupSoon);
+  pollF1();
   pollFootball();
   pollStats();
+  pollInfo();
+  setInterval(pollInfo, INFO_EVERY);
+  setInterval(showNews, NEWS_EVERY);
+  setInterval(pollF1, 6 * 3600000);
   setInterval(rotatePick, ROTATE_EVERY);
   renewDevMode();
   setInterval(renewDevMode, 6 * 3600000);   // the service renews only once a day; this keeps the days shown fresh
@@ -2475,5 +2564,6 @@
 
   // For the browser preview and tests.
   window.FreeMyTV = {state: st, move: move, activate: activate, back: back, showSaver: showSaver, hideSaver: hideSaver, toast: toast,
-    showAmbient: showAmbient, hideAmbient: hideAmbient, applyDim: applyDim, showFootball: showFootball};
+    showAmbient: showAmbient, hideAmbient: hideAmbient, applyDim: applyDim, showFootball: showFootball,
+    setInfo: function (h, r) { news = h; rates = r; showNews(); }, setF1: function (r) { f1Race = r; }};
 })();

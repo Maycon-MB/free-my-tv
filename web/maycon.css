@@ -358,3 +358,23 @@ body:not(.night) #searchpage .sfield, body:not(.night) #searchpage .chip { backg
 body:not(.night) #buttons .round { background: #FFF; border: 1.5px solid rgba(0, 0, 0, 0.1); color: #1D1D1F; }
 
 #perf .side.bad { color: #FF7A7F; }   /* under 10 days of Developer Mode left */
+
+/* Headlines and exchange rates: one quiet line between the title and the top buttons. */
+#news {
+  position: absolute;
+  left: 640px;
+  top: 96px;
+  width: 840px;
+  height: 30px;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 21px;
+  line-height: 30px;
+  color: #8C8C96;
+}
+#news .src { font-family: 'Mono', monospace; font-weight: 700; font-size: 17px; letter-spacing: 0.1em; color: #FF7A7F; margin-right: 12px; }
+#news .title { display: inline-block; max-width: 560px; overflow: hidden; text-overflow: ellipsis; vertical-align: top; }
+#news .rates { position: absolute; right: 0; top: 0; padding-left: 16px; background: #0B0B0D; font-family: 'Mono', monospace; font-size: 17px; letter-spacing: 0.04em; }
+body:not(.night) #news .rates { background: #F5F5F7; }
+#football .f1 .teams { font-size: 22px; font-weight: 700; }
+#searchpage .phone { margin-top: 8px; font-family: 'Mono', monospace; font-size: 19px; letter-spacing: 0.04em; color: #3DD68C; }
