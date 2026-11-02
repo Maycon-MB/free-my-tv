@@ -378,3 +378,7 @@ body:not(.night) #buttons .round { background: #FFF; border: 1.5px solid rgba(0,
 body:not(.night) #news .rates { background: #F5F5F7; }
 #football .f1 .teams { font-size: 22px; font-weight: 700; }
 #searchpage .phone { margin-top: 8px; font-family: 'Mono', monospace; font-size: 19px; letter-spacing: 0.04em; color: #3DD68C; }
+
+/* Drawer shortcuts: 13 keys share the row, so the name may take two smaller lines instead of being cut. */
+.key .sym { top: 24px; }
+.key .label { top: 68px; font-size: 19px; line-height: 22px; white-space: normal; text-align: center; max-height: 44px; }

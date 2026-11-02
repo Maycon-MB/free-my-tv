@@ -825,7 +825,7 @@
 
   var SLEEP_STEPS = [0, 30, 60, 90, 120], sleepStep = 0;
 
-  function sleepLabel() { return SLEEP_STEPS[sleepStep] ? 'Timer: ' + SLEEP_STEPS[sleepStep] + ' min' : 'Timer: desligado'; }
+  function sleepLabel() { return SLEEP_STEPS[sleepStep] ? 'Timer ' + SLEEP_STEPS[sleepStep] + ' min' : 'Timer'; }
 
   function screenOff() {
     toast('Tela apagada. Aperte qualquer botão para acender.');
@@ -1256,10 +1256,10 @@
     }
     drawerInputs = drawerItems.length;
     drawerItems.push({label: tr('All Apps'), symbol: 'apps', run: openApps});
-    drawerItems.push({label: 'Apagar tela', symbol: 'tv', run: screenOff});
+    drawerItems.push({label: 'Apagar', symbol: 'tv', run: screenOff});
     drawerItems.push({label: 'Mudo', symbol: 'speaker', run: toggleMute});
     drawerItems.push({label: sleepLabel(), symbol: 'bedtime', run: cycleSleep});
-    drawerItems.push({label: 'Testar internet', symbol: 'wifi', run: speedTest});
+    drawerItems.push({label: 'Internet', symbol: 'wifi', run: speedTest});
     drawerItems.push({label: tr('Home Settings'), symbol: 'settings', run: openSettings});
     if (TV.canOpenSettings) drawerItems.push({label: tr('TV Settings'), symbol: 'tv_settings', run: tvSettings});
     var n = drawerItems.length, gap = 18, groupGap = 56, groups = drawerInputs > 0 && drawerInputs < n ? 2 : 1;
