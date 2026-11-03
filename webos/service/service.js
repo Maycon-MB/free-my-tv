@@ -152,7 +152,13 @@ function network() {
   });
   if (!best) return null;
   var up = readText('/sys/class/net/' + best.name + '/operstate').trim() !== 'down';
-  return {kind: /^(eth|enp)/.test(best.name) ? 'ethernet' : 'wifi', up: up, bytes: best.bytes};
+  return {kind: /^(eth|enp)/.test(best.name) ? 'ethernet' : 'wifi', up: up, bytes: best.bytes, signal: wifiSignal(best.name)};
+}
+
+/** Wi-Fi link quality, 0-100, from /proc/net/wireless (its "link" column, out of 70), or -1 when not listed. */
+function wifiSignal(name) {
+  var m = new RegExp('^\\s*' + name + ':\\s+\\S+\\s+([\\d.]+)', 'm').exec(readText('/proc/net/wireless'));
+  return m ? Math.max(0, Math.min(100, Math.round(parseFloat(m[1]) / 70 * 100))) : -1;
 }
 
 service.register('stats', function (message) {
@@ -161,7 +167,7 @@ service.register('stats', function (message) {
     out.cpu = Math.round((cpu.busy - lastCpu.busy) / (cpu.total - lastCpu.total) * 100);
   }
   if (net) {
-    out.net = {kind: net.kind, up: net.up};
+    out.net = {kind: net.kind, up: net.up, signal: net.signal};
     if (lastNet && now > lastNet.at && net.bytes >= lastNet.bytes) {
       out.net.kbps = Math.round((net.bytes - lastNet.bytes) * 8 / (now - lastNet.at));
     }

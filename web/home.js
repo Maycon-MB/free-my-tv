@@ -455,7 +455,7 @@
     buttons.innerHTML = '';
     // Material Symbols Rounded (Apache 2.0) as vectors: sharp at any scale, one stroke weight for the four.
     // Named buttons, as YouTube's and Netflix's: what each does is read, not guessed from an icon.
-    var defs = [['icons/sym-wifi.svg', 'Wi-Fi', 180], ['icons/sym-search.svg', 'Pesquisar', 250],
+    var defs = [['icons/sym-network_wifi.svg', '', 76], ['icons/sym-search.svg', 'Pesquisar', 250],
       ['icons/sym-tune.svg', 'Controles', 240], ['icons/sym-settings.svg', 'Ajustes', 200]];
     for (var b = 0, x = 1840; b < defs.length; b++) x -= defs[b][2] + (b ? 16 : 0);
     for (b = 0; b < defs.length; b++) {
@@ -678,14 +678,20 @@
     return kbps === undefined ? '—' : kbps >= 1000 ? decimal(kbps / 1000) + ' Mb/s' : kbps + ' kb/s';
   }
 
-  /** The network button: Wi-Fi or cable when connected, red "Sem rede" when not; OK opens the network settings. */
+  /**
+   * The network button, icon only: green bars for the Wi-Fi's signal (1 to 4) or the cable when connected, red when
+   * not. OK opens the TV's network settings.
+   */
   function showNetwork() {
     var button = $('buttons').children[0], net = lastStats && lastStats.net;
     if (!button) return;
-    var down = !!net && !net.up, wired = !!net && net.kind === 'ethernet';
+    var down = !!net && !net.up, wired = !!net && net.kind === 'ethernet', signal = net ? net.signal : -1;
+    // Bars over the full fan (Material's network_wifi), so a weak signal still reads as Wi-Fi.
+    var bars = signal < 0 || signal >= 80 ? 'network_wifi' : signal >= 55 ? 'network_wifi_3_bar'
+      : signal >= 30 ? 'network_wifi_2_bar' : 'network_wifi_1_bar';
     setClass(button, 'offline', down);
-    button.querySelector('.plabel').textContent = down ? 'Sem rede' : wired ? 'Cabo' : 'Wi-Fi';
-    var icon = 'icons/sym-' + (down ? 'wifi_off' : wired ? 'lan' : 'wifi') + '.svg', s = button.querySelector('.sym');
+    setClass(button, 'online', !!net && !down);
+    var icon = 'icons/sym-' + (down ? 'wifi_off' : wired ? 'lan' : bars) + '.svg', s = button.querySelector('.sym');
     s.style.webkitMaskImage = s.style.maskImage = 'url(' + icon + ')';
   }
 

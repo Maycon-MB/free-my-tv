@@ -519,7 +519,7 @@ var TV = (function () {
       if (!webos) {
         if (samsung) { done(null); return; }
         done({cpu: 18 + Math.round(Math.random() * 20), mem: {usedMb: 1080, totalMb: 1223, swapUsedMb: 470, swapTotalMb: 900},
-              net: {kind: 'wifi', up: true, kbps: Math.round(Math.random() * 4000)}});
+              net: {kind: 'wifi', up: true, signal: 72, kbps: Math.round(Math.random() * 4000)}});
         return;
       }
       luna('luna://' + self + '.service/stats', {}, done);
