@@ -7,7 +7,8 @@ webOS 25 com 1,2 GB de RAM. O README e o CLAUDE.md do original continuam valendo
 
 Tudo à vista, sem gesto escondido (o padrão de Netflix e YouTube):
 
-- **Topo:** abas Explorar, Filmes, Séries e Minha lista; botões Pesquisar, Controles e Ajustes, com nome.
+- **Topo:** abas Explorar, Filmes, Séries e Minha lista; ícone de rede (verde com barras de sinal, vermelho sem
+  rede; OK abre a rede da TV) e os botões Pesquisar, Controles e Ajustes, com nome.
 - **Fileira de apps:** ← → percorre, OK abre. Segurar OK num app muda ele de lugar (atalho; também há a ordem
   "Mais usados" nos Ajustes).
 - **▼ desce** para Entradas, TV ao vivo, clima, desempenho e ajustes da TV, anunciados no rodapé.
@@ -24,6 +25,7 @@ Tudo à vista, sem gesto escondido (o padrão de Netflix e YouTube):
 | Navegação | Botões do topo com nome; ▼ para a fileira de entradas e ajustes; só entradas com algo ligado | `web/home.js` |
 | Navegação | Página do título com Assistir, Trailer e + Minha lista; aba Minha lista (salvos e recentes) | `web/home.js` |
 | Navegação | Séries da Minha lista com selo de novo episódio (últimos 7 dias) ou do próximo (dia da semana) | `web/data.js`, `web/home.js` |
+| Navegação | Ícone de rede no topo: verde com 1 a 4 barras (`/proc/net/wireless`), vermelho sem rede; abre a rede da TV | `web/home.js`, `webos/service/service.js` |
 | Navegação | Volta sempre ao Free My TV quando a home da LG aparece (serviço assina o app em primeiro plano) | `webos/service/service.js` |
 | Apps | Todos os apps na fileira; segurar OK move; ordem manual ou mais usados; Claro tv+, Pluto TV e Mercado Play reconhecidos | `web/home.js`, `web/data.js` |
 | Apps | Título em vários apps: um Assistir por app (os mais usados primeiro), ícones nos resultados; conta assinatura, grátis e com anúncios | `web/data.js`, `web/home.js` |
@@ -76,7 +78,7 @@ neste repositório.
 Confirmado (webOS 25): renovação pela TV, volta ao Free My TV pelo Home, Netflix e Disney+ no título, trailer,
 pesquisa pelo celular e QR code, manchetes, F1, futebol, permissões da API de controle remoto.
 
-A testar: timer até desligar, só o som, aviso de gol com jogo ao vivo, a TV ligando no app pela "última entrada"
+A testar: ícone de rede e barras de sinal (instalação pendente: a TV estava desligada), timer até desligar, só o som, aviso de gol com jogo ao vivo, a TV ligando no app pela "última entrada"
 (inclusive depois de tirar da tomada) e o roteiro de abrir no título em outros apps (fim deste arquivo).
 
 ## Atualizar com o original
