@@ -413,3 +413,30 @@ body:not(.night) #news .rates { background: #F5F5F7; }
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 #news { width: 740px; }
+
+/* Help sheet: label left, where it is right, in the same box as the other sheets. */
+#help .box {
+  position: absolute;
+  left: 360px;
+  top: 110px;
+  width: 1200px;
+  border-radius: 40px;
+  padding: 30px 30px 26px;
+  box-sizing: border-box;
+  background: #141417;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+#help .row .value { font-size: 24px; color: #B4B4BC; }
+
+/* Above the shelf, while it has the focus: what ▼ and holding OK do. */
+#shelfhint {
+  position: absolute;
+  right: 110px;
+  top: 776px;
+  font-size: 23px;
+  font-weight: 500;
+  color: #8C8C96;
+  white-space: nowrap;
+  -webkit-transition: opacity 0.2s;
+  transition: opacity 0.2s;
+}

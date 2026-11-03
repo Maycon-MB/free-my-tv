@@ -355,11 +355,11 @@
 
   // MARK: - Focus
 
-  var Z = {TOP: 'top', CARDS: 'cards', SHELF: 'shelf', DRAWER: 'drawer', APPS: 'apps', SETTINGS: 'settings', EDIT: 'edit', LANG: 'lang', CITY: 'city', KEY: 'key', ABOUT: 'about', SEARCH: 'search', TEAMS: 'teams', CTRL: 'ctrl'};
+  var Z = {TOP: 'top', CARDS: 'cards', SHELF: 'shelf', DRAWER: 'drawer', APPS: 'apps', SETTINGS: 'settings', EDIT: 'edit', LANG: 'lang', CITY: 'city', KEY: 'key', ABOUT: 'about', SEARCH: 'search', TEAMS: 'teams', CTRL: 'ctrl', HELP: 'help'};
   var st = {zone: Z.SHELF, top: 0, tab: 0, card: 0, shelf: 0, drawer: 0, grid: 0, row: 0, edit: 0, lang: 0, city: 0, key: 0};
   var cards = [];
 
-  function sheetOpen() { return st.zone === Z.APPS || st.zone === Z.SETTINGS || st.zone === Z.EDIT || st.zone === Z.LANG || st.zone === Z.CITY || st.zone === Z.KEY || st.zone === Z.ABOUT || st.zone === Z.SEARCH || st.zone === Z.TEAMS || st.zone === Z.CTRL; }
+  function sheetOpen() { return st.zone === Z.APPS || st.zone === Z.SETTINGS || st.zone === Z.EDIT || st.zone === Z.LANG || st.zone === Z.CITY || st.zone === Z.KEY || st.zone === Z.ABOUT || st.zone === Z.SEARCH || st.zone === Z.TEAMS || st.zone === Z.CTRL || st.zone === Z.HELP; }
 
   function updateFocus() {
     var i, list;
@@ -629,7 +629,8 @@
 
   /** The focused app's name under its tile: logos alone don't say which Globoplay or LG app it is. */
   function showTileName() {
-    var label = $('tilename'), app = st.zone === Z.SHELF ? shelf[st.shelf] : null;
+    var label = $('tilename'), app = st.zone === Z.SHELF ? shelf[st.shelf] : null, hint = $('shelfhint');
+    if (hint) hint.style.opacity = app && !moving ? '1' : '0';
     if (!label) return;
     label.style.opacity = app ? '1' : '0';
     if (!app) return;
@@ -720,7 +721,7 @@
 
   // MARK: - Profiles: each keeps its own shelf order, theme, accent color and kids mode
 
-  var PROFILE_KEYS = ['shelf', 'theme', 'accent', 'kids'];
+  var PROFILE_KEYS = ['shelf', 'theme', 'accent', 'kids', 'helped'];
   var PROFILE_NAMES = ['Maycon', 'Família', 'Crianças', 'Visitas', 'Convidado'];
   var ACCENTS = [['red', 'Vermelho'], ['blue', 'Azul'], ['green', 'Verde'], ['purple', 'Roxo'], ['orange', 'Laranja'],
     ['yellow', 'Amarelo']];
@@ -750,6 +751,7 @@
 
   function profileChanged() {
     deleteArmed = false;
+    if (!Prefs.get('helped', false)) setTimeout(openHelp, 800);
     applyAccent();
     checkNight();
     pickShelf();
@@ -842,6 +844,43 @@
     TV.control('com.webos.service.tvpower/power/turnOffScreen', {}, function (res) {
       if (!res) toast('A TV não deixou apagar a tela (permita o Free My TV quando ela perguntar).');
     });
+  }
+
+  // MARK: - Help: where everything is, shown once per profile and again from Home Settings
+
+  var HELP_ROWS = [
+    ['Apps', 'na fileira de baixo; ← → percorre, OK abre'],
+    ['Mover um app', 'segure OK nele e use ← →; OK solta'],
+    ['Entradas (HDMI, TV)', 'aperte ▼ na fileira de apps'],
+    ['Ajustes da TV', 'aperte ▼ e vá até Ajustes da TV'],
+    ['Pesquisar', 'lupa no topo (ou pelo celular, pelo QR code)'],
+    ['Trailer', 'segure OK num filme ou série'],
+    ['Controles', '2º botão do topo: só o som, timer, internet'],
+    ['Voltar', 'o botão Voltar nunca sai daqui']
+  ];
+
+  function openHelp() {
+    var box = $('help').firstChild;
+    setClass($('settings'), 'open', false);
+    box.innerHTML = '';
+    el('div', 'title', box, 'Onde fica cada coisa');
+    var list = el('div', 'list', box), holder = el('div', 'rows', list);
+    list.style.height = HELP_ROWS.length * 78 + 'px';
+    for (var i = 0; i < HELP_ROWS.length; i++) {
+      var row = el('div', 'row', holder, HELP_ROWS[i][0]);
+      el('span', 'value', row, HELP_ROWS[i][1]);
+    }
+    el('div', 'hint', box, 'OK ou Voltar fecha · de novo em Configurações da Home › Ajuda');
+    st.zone = Z.HELP;
+    setClass($('help'), 'open', true);
+    updateFocus();
+  }
+
+  function closeHelp() {
+    setClass($('help'), 'open', false);
+    Prefs.set('helped', true);
+    st.zone = Z.SHELF;
+    updateFocus();
   }
 
   // The Controls sheet (top button): what the remote has no button for.
@@ -1584,6 +1623,7 @@
         step: function () { Prefs.set('hideAnimation', !Prefs.hideAnimation()); Data.refresh(); }},
       {label: 'Times', value: followed().map(function (t) { return t.name; }).join(', ') || 'nenhum', opens: true,
         step: function (d) { if (d >= 0) openTeams(); }},
+      {label: 'Ajuda: onde fica cada coisa', value: '›', opens: true, step: function (d) { if (d >= 0) openHelp(); }},
       {label: 'Voltar ao Free My TV', toggle: Prefs.get('backHome', true),
         step: function () { Prefs.set('backHome', !Prefs.get('backHome', true)); TV.service('backHome', {on: Prefs.get('backHome', true)}); }},
       {label: 'Ordem dos apps', value: Prefs.get('shelfOrder', 'manual') === 'usage' ? 'Mais usados' : 'Manual',
@@ -2295,6 +2335,9 @@
       case Z.CTRL:
         controlRows()[ctrlRow].run(1);
         return;
+      case Z.HELP:
+        closeHelp();
+        return;
     }
   }
 
@@ -2394,6 +2437,7 @@
     if (st.zone === Z.SEARCH) { closeSearch(); return; }
     if (st.zone === Z.TEAMS) { closeTeams(); return; }
     if (st.zone === Z.CTRL) { closeControls(); return; }
+    if (st.zone === Z.HELP) { closeHelp(); return; }
     if (sheetOpen()) { closeSheets(); return; }
     if (st.zone === Z.DRAWER) { closeDrawer(); return; }
     if (st.zone !== Z.SHELF && shelf.length) { st.zone = Z.SHELF; updateFocus(); return; }
@@ -2713,6 +2757,7 @@
   applyAccent();
   restoreBackup();
   Prefs.onSave(backupSoon);
+  if (!Prefs.get('helped', false)) setTimeout(openHelp, 1500);
   // LG's home never stays: the service brings Free My TV back (Home Settings can turn it off).
   TV.service('backHome', {on: Prefs.get('backHome', true)});
   pollF1();
