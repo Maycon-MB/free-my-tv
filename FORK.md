@@ -89,3 +89,23 @@ O app grava as configurações em `/media/developer/temp/freemytv-backup.json` n
    tira a entrada da TV.
 3. `Unregister-ScheduledTask FreeMyTV-RenovarDevMode` e apagar `%USERPROFILE%\.freemytv` param a renovação.
 4. No app Developer Mode da TV, desligar o Dev Mode Status.
+
+## Roteiro: abrir no título em mais apps
+
+Netflix e Disney+ já abrem no título. Para os outros, a busca da própria LG lança o app com
+`replaceParams.deeplinkingParams` e o app usa o modelo de link do seu `appinfo.json` (estudo do projeto
+[Glasshouse](https://github.com/rorygallagher2024/glasshouse/blob/main/docs/development/TV-RESEARCH.md)). Teste pelo
+SSH da TV, com o app fechado e depois aberto, e anote se abriu no título:
+
+```sh
+L=luna://com.webos.applicationManager/launch
+luna-send-pub -n 1 $L '{"id":"amazon","replaceParams":{"deeplinkingParams":{"target":"$CONTENTID","value":"B09QH98YG1"}}}'
+luna-send-pub -n 1 $L '{"id":"com.wbd.stream","replaceParams":{"deeplinkingParams":{"target":"$CONTENTID","value":"urn:hbo:series:GWukCJAq-nIuHwwEAAAB4"}}}'
+luna-send-pub -n 1 $L '{"id":"com.apple.appletv","replaceParams":{"deeplinkingParams":{"target":"$CONTENTID","value":"umc.cmc.vtoh0mn0xn7t3c643xqonfzy"}}}'
+luna-send-pub -n 1 $L '{"id":"globoplaywebos","replaceParams":{"deeplinkingParams":{"target":"$CONTENTID","value":"MyCrVrr6gW"}}}'
+```
+
+Títulos: Os Anéis de Poder (Prime, ASIN do Wikidata P8055), Succession (Max, P8298), Ted Lasso (Apple TV, P9751;
+o estudo diz que o Apple TV ignorou o id da série), amostra do Globoplay (P12356). O que abrir no título entra em
+`TITLE_LINKS` (`web/data.js`). Se a LG recusar `replaceParams` vindo de app de desenvolvedor, a alternativa é a
+busca da LG (`com.webos.service.nlpmanager/search` + `com.webos.service.sdx/send`), que traz o id exato de cada app.
