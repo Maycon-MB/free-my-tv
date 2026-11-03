@@ -3,32 +3,38 @@
 Fork de [simbasjungles/free-my-tv](https://github.com/simbasjungles/free-my-tv) (MIT) ajustado para uma LG
 webOS 25 com 1,2 GB de RAM. O README e o CLAUDE.md do original continuam valendo; aqui fica só o que muda.
 
+## Como se usa
+
+Tudo à vista, sem gesto escondido (o padrão de Netflix e YouTube):
+
+- **Topo:** abas Explorar, Filmes, Séries e Minha lista; botões Pesquisar, Controles e Ajustes, com nome.
+- **Fileira de apps:** ← → percorre, OK abre. Segurar OK num app muda ele de lugar (atalho; também há a ordem
+  "Mais usados" nos Ajustes).
+- **▼ desce** para Entradas, TV ao vivo, clima, desempenho e ajustes da TV, anunciados no rodapé.
+- **OK num filme ou série** abre a página dele: Assistir no app certo, Trailer, + Minha lista, Voltar.
+- **Home** ou sair de um app nunca deixa a home da LG na tela: o Free My TV volta sozinho.
+
 ## O que muda
 
-| Recurso | Onde |
-|---|---|
-| Tema escuro do portfólio (vermelho `#E5484D`, JetBrains Mono, sem sombras) e constelação de fundo | `web/maycon.css`, `web/home.js` |
-| Logos vetoriais nos apps conhecidos, nome do app focado, todos os apps na prateleira | `web/home.js` |
-| Segurar OK num app (tecla ou ponteiro) move ele; ← → muda a posição, OK solta | `web/home.js` |
-| Pesquisa no TMDB com filtros (tipo, gênero, só meus apps) e aviso de aluguel/compra | `web/home.js`, `web/data.js` |
-| Netflix abre direto no título (id do Wikidata); os outros abrem na tela inicial do app (Disney+ travou com link web) | `web/data.js`, `web/home.js` |
-| Segurar OK num título do Explorar ou da pesquisa abre o trailer no YouTube | `web/data.js`, `web/home.js` |
-| Pesquisa sem texto mostra os títulos abertos recentemente; opção "Ordem dos apps: Mais usados" | `web/home.js` |
-| Perfis nas Configurações da Home: ordem dos apps, tema, cor de destaque, modo infantil | `web/home.js`, `web/accents.css` |
-| Jogo do Flamengo ao lado das abas (API pública da ESPN pelo serviço) e aviso de gol por cima de outros apps | `webos/service/service.js`, `web/home.js` |
-| Gaveta: apagar tela, mudo e timer que desliga a TV (API de controle remoto; a TV pede Permitir uma vez) | `webos/service/service.js`, `web/tv.js`, `web/home.js` |
-| Guia "Onde fica cada coisa" uma vez por perfil (e em Ajuda) e dica acima da fileira de apps | `web/home.js` |
-| Volta sempre ao Free My TV quando a home da LG aparece; painel Controles (só o som, timer, internet) | `webos/service/service.js`, `web/home.js` |
-| Destaque do Explorar girando (ligado) e constelação animada (desligada), nas Configurações da Home | `web/home.js` |
-| Developer Mode renovado pela própria TV, uma vez por dia em segundo plano; dias restantes no painel | `webos/service/service.js`, `web/home.js` |
-| Linha discreta no topo: manchetes do ge e do g1 (RSS) e dólar/euro (AwesomeAPI) | `webos/service/service.js`, `web/home.js` |
-| Próximo GP de F1 ao lado do jogo; lembrete 10 min antes do jogo, por cima de outros apps | `webos/service/service.js`, `web/home.js` |
-| Pesquisa digitada pelo celular: página na rede de casa (porta 8770) com código de 4 dígitos, só com a pesquisa aberta | `webos/service/service.js`, `web/home.js` |
-| Gaveta: testar a velocidade da internet (10 MB da Cloudflare) | `webos/service/service.js`, `web/home.js` |
-| Explorar com até 6 títulos, o que passa no Brasil primeiro, selo com o ícone do app, Claro tv+ | `web/data.js`, `web/home.js` |
-| Painel de desempenho na gaveta (CPU, RAM, swap, rede lidos de `/proc`); no topo só alerta | `webos/service/service.js`, `web/tv.js`, `web/home.js` |
-| Voltar não sai para a home da LG; fotos da proteção de tela em 1280 px e liberadas ao sair | `web/home.js` |
-| App registrado como entrada da TV (`supportGIP`), para ligar direto nele com "última entrada" | `webos/appinfo.json` |
+| Área | Recurso | Onde |
+|---|---|---|
+| Visual | Tema do portfólio (escuro, JetBrains Mono, sem sombras); cores Vermelho, Rosa, Azul, Verde, Roxo, Laranja, Amarelo | `web/maycon.css`, `web/accents.css` |
+| Visual | Fundo por perfil: constelação (animada, pausa fora da tela inicial), gradiente na cor, foto do destaque ou liso | `web/home.js` |
+| Visual | Logos vetoriais e ícones Material Symbols; nome do app focado; até 3 times e F1 no topo | `web/home.js` |
+| Navegação | Botões do topo com nome; ▼ para a fileira de entradas e ajustes; só entradas com algo ligado | `web/home.js` |
+| Navegação | Página do título com Assistir, Trailer e + Minha lista; aba Minha lista (salvos e recentes) | `web/home.js` |
+| Navegação | Volta sempre ao Free My TV quando a home da LG aparece (serviço assina o app em primeiro plano) | `webos/service/service.js` |
+| Apps | Todos os apps na fileira; segurar OK move; ordem manual ou mais usados; Claro tv+ reconhecido | `web/home.js`, `web/data.js` |
+| Apps | Abre no título: Netflix (Wikidata P1874) e Disney+ (P13902, formato da busca da LG); os demais na tela inicial | `web/data.js` |
+| Pesquisa | TMDB com filtros; tolera erro de digitação; nome de ator traz os trabalhos dele; seus apps primeiro | `web/data.js` |
+| Pesquisa | Resultados ao digitar; QR code para digitar pelo celular (porta 8770, código de 4 dígitos) | `web/home.js`, `webos/service/service.js` |
+| Explorar | Até 6 títulos, o que passa no Brasil primeiro, selo com o ícone do app, destaque girando | `web/data.js`, `web/home.js` |
+| Perfis | Ordem dos apps, tema, cor, fundo, modo infantil, lista, recentes, notícias/esportes e painel de desempenho | `web/home.js` |
+| Esportes | Times escolhidos pelo controle (ESPN), aviso de gol e lembrete 10 min antes, por cima de outros apps | `webos/service/service.js` |
+| Controles | Botão Controles: só o som (apaga a tela), timer que desliga a TV, teste de velocidade | `web/home.js`, `web/tv.js` |
+| TV | Painel de desempenho (CPU, RAM, swap, rede de `/proc`); manchetes do ge e g1 no topo | `webos/service/service.js` |
+| TV | Developer Mode renovado pela própria TV, uma vez por dia; backup das configurações; app como entrada | `webos/service/service.js`, `webos/backup.py` |
+| Memória | Fotos em 1280 px, liberadas ao sair; pesquisa e página do título soltam as imagens ao fechar | `web/home.js` |
 
 ## Instalar nesta TV
 
@@ -51,20 +57,24 @@ pelo SSH da TV (`deleteDevice` desfaz). Depois, nas configurações da TV, ligar
 
 ## Developer Mode sem vencer
 
-A sessão dura 1000 h. `%USERPROFILE%\.freemytv\renovar-devmode.ps1` chama `ResetDevModeSession` da LG com o
-token lido da TV (`/var/luna/preferences/devmode_enabled`, guardado em `.freemytv\devmode_token`) e grava em
-`renovacao.log` (tenta 3 vezes, um minuto entre elas, e grava só o tipo do erro). A tarefa agendada
-`FreeMyTV-RenovarDevMode` roda aos domingos às 20h e a cada login; basta o notebook ligar uma vez em 40 dias.
-O token nunca entra no repositório.
+A sessão dura 1000 h e, se acabar, a TV apaga o app. Três renovações, nenhuma depende de lembrar:
 
-## A testar na TV
+1. **A própria TV** (principal): o serviço lê o token (`/var/luna/preferences/devmode_enabled`) e chama
+   `ResetDevModeSession` da LG uma vez por dia, quando o app abre. Confirmado na TV em 2026-11-02.
+2. **GitHub** (reserva): o repositório privado `Maycon-MB/tv-devmode-renovar` renova toda segunda, com o token no
+   segredo `LG_DEVMODE_TOKEN`.
+3. **Notebook** (redundante): `%USERPROFILE%\.freemytvenovar-devmode.ps1` pela tarefa `FreeMyTV-RenovarDevMode`.
 
-- Timer, apagar tela, mudo e aviso de gol (permissões novas da API de controle remoto).
-- Renovação do Developer Mode pela TV (o serviço precisa ler `/var/luna/preferences/devmode_enabled`); se der
-  certo, a tarefa do notebook vira só reserva.
-- Página do celular (o serviço abrir a porta 8770 na TV), manchetes, F1 e lembrete do jogo.
-- Modo cinema (troca do modo de imagem pelo alerta da TV) ainda não feito: depende de teste.
-- O app na lista de Entradas e a TV ligando nele com "última entrada", inclusive depois de tirar da tomada.
+Se o Developer Mode for desligado e ligado de novo, o token muda: atualize o segredo do GitHub. O token nunca entra
+neste repositório.
+
+## Confirmado na TV e a testar
+
+Confirmado (webOS 25): renovação pela TV, volta ao Free My TV pelo Home, Netflix e Disney+ no título, trailer,
+pesquisa pelo celular e QR code, manchetes, F1, futebol, permissões da API de controle remoto.
+
+A testar: timer até desligar, só o som, aviso de gol com jogo ao vivo, a TV ligando no app pela "última entrada"
+(inclusive depois de tirar da tomada) e o roteiro de abrir no título em outros apps (fim deste arquivo).
 
 ## Atualizar com o original
 
