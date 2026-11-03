@@ -369,11 +369,11 @@
 
   // MARK: - Focus
 
-  var Z = {TOP: 'top', CARDS: 'cards', SHELF: 'shelf', DRAWER: 'drawer', APPS: 'apps', SETTINGS: 'settings', EDIT: 'edit', LANG: 'lang', CITY: 'city', KEY: 'key', ABOUT: 'about', SEARCH: 'search', TEAMS: 'teams', CTRL: 'ctrl', HELP: 'help', DETAIL: 'detail'};
+  var Z = {TOP: 'top', CARDS: 'cards', SHELF: 'shelf', DRAWER: 'drawer', APPS: 'apps', SETTINGS: 'settings', EDIT: 'edit', LANG: 'lang', CITY: 'city', KEY: 'key', ABOUT: 'about', SEARCH: 'search', TEAMS: 'teams', CTRL: 'ctrl', HELP: 'help', DETAIL: 'detail', PAIR: 'pair'};
   var st = {zone: Z.SHELF, top: 0, tab: 0, card: 0, shelf: 0, drawer: 0, grid: 0, row: 0, edit: 0, lang: 0, city: 0, key: 0};
   var cards = [];
 
-  function sheetOpen() { return st.zone === Z.APPS || st.zone === Z.SETTINGS || st.zone === Z.EDIT || st.zone === Z.LANG || st.zone === Z.CITY || st.zone === Z.KEY || st.zone === Z.ABOUT || st.zone === Z.SEARCH || st.zone === Z.TEAMS || st.zone === Z.CTRL || st.zone === Z.HELP || st.zone === Z.DETAIL; }
+  function sheetOpen() { return st.zone === Z.APPS || st.zone === Z.SETTINGS || st.zone === Z.EDIT || st.zone === Z.LANG || st.zone === Z.CITY || st.zone === Z.KEY || st.zone === Z.ABOUT || st.zone === Z.SEARCH || st.zone === Z.TEAMS || st.zone === Z.CTRL || st.zone === Z.HELP || st.zone === Z.DETAIL || st.zone === Z.PAIR; }
 
   function updateFocus() {
     var i, list;
@@ -529,6 +529,10 @@
       if (wide && !n.getAttribute('data-back') && cards[i]) {
         n.setAttribute('data-back', '1');
         n.querySelector('.back').style.backgroundImage = 'url("' + Data.image(cards[i].backdrop, 'w1280') + '")';
+      } else if (!wide && n.getAttribute('data-back')) {
+        // Only the wide card keeps its 1280 px photo (~3.7 MB decoded): with the rotation, all six would.
+        n.removeAttribute('data-back');
+        dropBack(n.querySelector('.back'));
       }
       left += w + 40;
     }
@@ -536,6 +540,13 @@
   }
 
   var bgUrl = null, bgFront = 'bgA';
+
+  /** After its fade-out (0.3 s), a narrow card's photo goes, unless the card turned wide again meanwhile. */
+  function dropBack(layer) {
+    setTimeout(function () {
+      if (layer.parentNode && !layer.parentNode.parentNode.getAttribute('data-back')) layer.style.backgroundImage = 'none';
+    }, 400);
+  }
 
   /** The focused pick's photo as the background: drawn tiny and stretched, it's already as soft as a heavy blur. */
   function backdrop(url) {
@@ -1004,6 +1015,7 @@
 
   function controlRows() {
     return [
+      {label: 'Controle pelo celular', value: '›', run: function () { closeControls(); openPairing(); }},
       {label: 'Só o som (apaga a tela)', value: '›', run: function () { closeControls(); screenOff(); }},
       {label: 'Timer para desligar', value: SLEEP_STEPS[sleepStep] ? SLEEP_STEPS[sleepStep] + ' min' : 'desligado',
         step: function (d) { cycleSleep(d); renderControls(); }, run: function () { cycleSleep(1); renderControls(); }},
@@ -1035,6 +1047,33 @@
 
   function closeControls() {
     setClass($('controls'), 'open', false);
+    st.zone = Z.TOP;
+    st.top = NTABS + 2;
+    updateFocus();
+  }
+
+  // MARK: - Pairing a phone as a remote: the QR code carries the link and a fresh code; scanning it pairs the phone
+
+  function openPairing() {
+    var box = $('pairing').firstChild;
+    box.innerHTML = '';
+    el('div', 'title', box, 'Controle pelo celular');
+    var hint = el('div', 'hint', box, 'Gerando o código…');
+    st.zone = Z.PAIR;
+    setClass($('pairing'), 'open', true);
+    updateFocus();
+    TV.service('phone', {action: 'show'}, function (res) {
+      if (st.zone !== Z.PAIR) return;
+      if (!res || !res.qr) { hint.textContent = 'Não deu para abrir a página do celular (a TV está na rede?).'; return; }
+      drawQr(el('canvas', 'qrbig', box), res.qr);
+      hint.textContent = 'Aponte a câmera do celular. Ou abra ' + res.url.replace('http://', '') + ' e digite ' + res.code +
+        '. O celular fica pareado: da próxima vez, é só abrir o mesmo endereço.';
+    });
+  }
+
+  function closePairing() {
+    setClass($('pairing'), 'open', false);
+    $('pairing').firstChild.innerHTML = '';
     st.zone = Z.TOP;
     st.top = NTABS + 2;
     updateFocus();
@@ -1766,6 +1805,11 @@
         step: function () { Prefs.set('extras', !Prefs.get('extras', true)); applyExtras(); }},
       {label: 'Painel de desempenho', toggle: Prefs.get('showPerf', true),
         step: function () { Prefs.set('showPerf', !Prefs.get('showPerf', true)); renderPanels(); }},
+      {label: 'Controle pelo celular', toggle: Prefs.get('phoneRemote', true),
+        step: function () {
+          Prefs.set('phoneRemote', !Prefs.get('phoneRemote', true));
+          TV.service('phone', {action: 'remote', on: Prefs.get('phoneRemote', true)});
+        }},
       {label: 'Voltar ao Free My TV', toggle: Prefs.get('backHome', true),
         step: function () { Prefs.set('backHome', !Prefs.get('backHome', true)); TV.service('backHome', {on: Prefs.get('backHome', true)}); }},
       {label: 'Ordem dos apps', value: Prefs.get('shelfOrder', 'manual') === 'usage' ? 'Mais usados' : 'Manual',
@@ -2531,6 +2575,9 @@
       case Z.DETAIL:
         detailButtons()[dtButton].run();
         return;
+      case Z.PAIR:
+        closePairing();
+        return;
     }
   }
 
@@ -2636,6 +2683,7 @@
     if (st.zone === Z.CTRL) { closeControls(); return; }
     if (st.zone === Z.HELP) { closeHelp(); return; }
     if (st.zone === Z.DETAIL) { closeDetail(); return; }
+    if (st.zone === Z.PAIR) { closePairing(); return; }
     if (sheetOpen()) { closeSheets(); return; }
     if (st.zone === Z.DRAWER) { closeDrawer(); return; }
     if (st.zone !== Z.SHELF && shelf.length) { st.zone = Z.SHELF; updateFocus(); return; }
@@ -2959,6 +3007,7 @@
   Prefs.onSave(backupSoon);
   // LG's home never stays: the service brings Free My TV back (Home Settings can turn it off).
   TV.service('backHome', {on: Prefs.get('backHome', true)});
+  TV.service('phone', {action: 'remote', on: Prefs.get('phoneRemote', true)});
   pollF1();
   pollFootball();
   pollStats();

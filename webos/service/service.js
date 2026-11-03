@@ -11,7 +11,8 @@ var service = new Service(require('./package.json').name);
 
 // What the page may ask the TV's remote control API for, and the permissions the TV asks the person once to allow.
 var PERMISSIONS = ['READ_INSTALLED_APPS', 'READ_RUNNING_APPS', 'READ_INPUT_DEVICE_LIST', 'CONTROL_INPUT_TV',
-  'CONTROL_AUDIO', 'CONTROL_POWER', 'WRITE_NOTIFICATION_TOAST'];
+  'CONTROL_AUDIO', 'CONTROL_POWER', 'WRITE_NOTIFICATION_TOAST', 'CONTROL_MOUSE_AND_KEYBOARD', 'CONTROL_INPUT_TEXT',
+  'CONTROL_INPUT_JOYSTICK', 'CONTROL_INPUT_MEDIA_PLAYBACK'];
 var ALLOWED = ['com.webos.applicationManager/listLaunchPoints', 'com.webos.applicationManager/getForegroundAppInfo',
   'tv/getExternalInputList', 'tv/switchInput', 'audio/getStatus', 'system/turnOff',
   'com.webos.service.tvpower/power/turnOffScreen', 'com.webos.service.tvpower/power/turnOnScreen',
@@ -484,11 +485,13 @@ service.register('remind', function (message) {
   message.respond({returnValue: true, at: reminderAt});
 });
 
-// MARK: - Typing from the phone: while the search is open, a page on the home network takes the text, after the
-// 4-digit code shown on the TV. Nothing else is served, and it stops when the search closes.
+// MARK: - The phone: a page on the home network that is a remote control (any app, through the TV's own pointer
+// input) and types text (into Free My TV's search when open, else into the field the app in front has). A phone
+// pairs once with the 4-digit code shown on the TV; its token is kept, so it isn't asked again.
 
-var http = require('http'), os = require('os');
-var phone = {server: null, code: '', text: '', port: 8770, fails: 0};
+var http = require('http'), os = require('os'), crypto = require('crypto');
+var PHONES = '/media/developer/temp/freemytv-phones.json';
+var phone = {server: null, code: '', text: '', port: 8770, fails: 0, searching: false, tokens: null, pointer: null};
 
 function lanAddress() {
   var nets = os.networkInterfaces();
@@ -501,62 +504,160 @@ function lanAddress() {
   return '';
 }
 
-var PHONE_PAGE = '<!doctype html><meta name=viewport content="width=device-width,initial-scale=1"><title>Free My TV</title>' +
+function tokens() {
+  if (!phone.tokens) {
+    try { phone.tokens = JSON.parse(readText(PHONES)) || []; } catch (e) { phone.tokens = []; }
+  }
+  return phone.tokens;
+}
+
+function newCode() {
+  phone.code = String(1000 + Math.floor(Math.random() * 9000));
+  phone.fails = 0;
+}
+
+function pairedBy(req) {
+  var m = /(?:^|;\s*)fmtv=([0-9a-f]{32})/.exec(req.headers.cookie || '');
+  return !!m && tokens().indexOf(m[1]) >= 0;
+}
+
+/** A new token for a phone that typed the right code (5 wrong codes lock pairing until a new code is shown). */
+function pair(code, res) {
+  if (phone.fails >= 5 || !phone.code || code !== phone.code) { phone.fails++; return false; }
+  var token = crypto.randomBytes(16).toString('hex'), list = tokens();
+  list.push(token);
+  if (list.length > 8) list.shift();
+  fs.writeFile(PHONES, JSON.stringify(list), function () {});
+  res.setHeader('Set-Cookie', 'fmtv=' + token + '; Max-Age=31536000; Path=/; HttpOnly; SameSite=Strict');
+  return true;
+}
+
+/** A WebSocket to a path on the TV's remote control server (the pointer input socket), text frames out only. */
+function wsOpen(url, onEnd) {
+  var m = /^wss?:\/\/[^\/]+(\/.*)$/.exec(url || ''), socket = net.connect(3000, '127.0.0.1'), open = false, queue = [];
+  if (!m) { onEnd(); return null; }
+  socket.on('connect', function () {
+    socket.write('GET ' + m[1] + ' HTTP/1.1\r\nHost: 127.0.0.1:3000\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n' +
+        'Sec-WebSocket-Version: 13\r\nSec-WebSocket-Key: ZnJlZW15dHYtcG9pbnRlcg==\r\n\r\n');
+  });
+  socket.on('data', function (chunk) {
+    if (open) return;   // nothing to read from it
+    if (!/^HTTP\/1\.1 101/.test(chunk.toString('utf8', 0, 12))) { socket.destroy(); return; }
+    open = true;
+    for (var i = 0; i < queue.length; i++) socket.write(frame(queue[i]));
+    queue = [];
+  });
+  socket.on('error', function () { socket.destroy(); });
+  socket.on('close', onEnd);
+  return {send: function (text) { if (open) socket.write(frame(text)); else queue.push(text); }};
+}
+
+var KEYS = ['UP', 'DOWN', 'LEFT', 'RIGHT', 'ENTER', 'BACK', 'HOME', 'VOLUMEUP', 'VOLUMEDOWN', 'MUTE', 'PLAY', 'PAUSE'];
+
+/** A remote button, as if pressed on the remote: works on any app in front. */
+function pressKey(name) {
+  if (KEYS.indexOf(name) < 0 || !lastKey) return;
+  if (phone.pointer) { phone.pointer.send('type:button\nname:' + name + '\n\n'); return; }
+  call('com.webos.service.networkinput/getPointerInputSocket', lastKey, {}, function (res) {
+    var path = res && res.payload && res.payload.socketPath;
+    if (!path || phone.pointer) return;
+    phone.pointer = wsOpen(path, function () { phone.pointer = null; });
+    if (phone.pointer) phone.pointer.send('type:button\nname:' + name + '\n\n');
+  });
+}
+
+/** Text from the phone: Free My TV's search takes it when open; otherwise the TV's keyboard types it. */
+function typeText(text) {
+  if (phone.searching) { phone.text = text; return; }
+  if (lastKey) call('com.webos.service.ime/insertText', lastKey, {text: text, replace: 0}, function () {});
+}
+
+var REMOTE_PAGE = '<!doctype html><meta name=viewport content="width=device-width,initial-scale=1,user-scalable=no">' +
+  '<title>Free My TV</title><style>body{font:18px system-ui;background:#0B0B0D;color:#F2F2F3;margin:0;padding:18px;' +
+  '-webkit-user-select:none;user-select:none}button,input{font:inherit;color:inherit;border-radius:16px;border:1px solid #2a2a30;' +
+  'background:#141417}button{padding:18px 0;font-weight:700}button:active{background:#E5484D}.pad{display:grid;' +
+  'grid-template-columns:1fr 1fr 1fr;gap:10px;margin:14px 0}.pad .ok{border-radius:50%;aspect-ratio:1}.row{display:grid;' +
+  'grid-template-columns:1fr 1fr 1fr;gap:10px;margin:10px 0}form{display:flex;gap:8px;margin-top:18px}form input{flex:1;' +
+  'padding:14px}form button{padding:14px 18px;background:#E5484D;border:0}h1{font-size:18px;color:#FF7A7F;letter-spacing:.1em;' +
+  'text-transform:uppercase;margin:4px 0}</style><h1>Controle da TV</h1>' +
+  '<div class=pad><span></span><button data-k=UP>▲</button><span></span><button data-k=LEFT>◀</button>' +
+  '<button class=ok data-k=ENTER>OK</button><button data-k=RIGHT>▶</button><span></span><button data-k=DOWN>▼</button>' +
+  '<span></span></div><div class=row><button data-k=BACK>Voltar</button><button data-k=HOME>Início</button>' +
+  '<button data-k=PLAY>▶ / ❚❚</button></div><div class=row><button data-k=VOLUMEDOWN>Vol −</button>' +
+  '<button data-k=MUTE>Mudo</button><button data-k=VOLUMEUP>Vol +</button></div>' +
+  '<form id=t><input name=q placeholder="Digitar na TV" autocomplete=off><button>Enviar</button></form><script>' +
+  'function post(p,b){return fetch(p,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:b})}' +
+  'document.querySelectorAll("[data-k]").forEach(function(b){b.onclick=function(){post("/key","name="+b.dataset.k);' +
+  'if(navigator.vibrate)navigator.vibrate(15)}});var t=document.getElementById("t");t.onsubmit=function(e){' +
+  'e.preventDefault();var q=t.q.value.trim();if(q)post("/text","q="+encodeURIComponent(q));t.q.value=""}</script>';
+
+var PAIR_PAGE = '<!doctype html><meta name=viewport content="width=device-width,initial-scale=1"><title>Free My TV</title>' +
   '<style>body{font:18px system-ui;background:#0B0B0D;color:#F2F2F3;margin:24px}input,button{font:inherit;width:100%;' +
   'box-sizing:border-box;padding:14px;margin:8px 0;border-radius:12px;border:1px solid #333;background:#141417;color:inherit}' +
-  'button{background:#E5484D;border:0;font-weight:700}</style><h2>Pesquisar na TV</h2>' +
-  '<form method=post><input name=code inputmode=numeric placeholder="Código da TV (4 dígitos)" required>' +
-  '<input name=q placeholder="Filme ou série" required autofocus><button>Enviar para a TV</button></form>';
+  'button{background:#E5484D;border:0;font-weight:700}</style><h2>Parear com a TV</h2><p>%MSG%</p><form method=post action=/pair>' +
+  '<input name=code inputmode=numeric placeholder="Código que aparece na TV" required autofocus><button>Parear</button></form>';
 
-function startPhone() {
-  phone.code = String(1000 + Math.floor(Math.random() * 9000));
-  phone.text = '';
-  phone.fails = 0;
+function body(req, done) {
+  var text = '';
+  req.on('data', function (c) { if (text.length < 2000) text += c; });
+  req.on('end', function () { done(require('querystring').parse(text)); });
+}
+
+function startServer() {
   if (phone.server) return;
   phone.server = http.createServer(function (req, res) {
-    if (req.method === 'POST') {
-      var body = '';
-      req.on('data', function (c) { if (body.length < 2000) body += c; });
-      req.on('end', function () {
-        var form = require('querystring').parse(body), ok = phone.fails < 5 && form.code === phone.code && form.q;
-        if (ok) phone.text = String(form.q).slice(0, 100);
-        else phone.fails++;   // after 5 wrong codes nothing more is taken until the search opens again
-        res.writeHead(200, {'Content-Type': 'text/html; charset=utf-8'});
-        res.end(PHONE_PAGE.replace('<h2>', ok ? '<p>Enviado. Pode digitar outro.</p><h2>' : '<p>Código errado.</p><h2>'));
+    var path = (req.url || '/').split('?')[0];
+    function page(html) { res.writeHead(200, {'Content-Type': 'text/html; charset=utf-8'}); res.end(html); }
+    if (req.method === 'POST' && path === '/pair') {
+      body(req, function (f) {
+        if (pair(String(f.code || ''), res)) { res.writeHead(303, {Location: '/'}); res.end(); }
+        else page(PAIR_PAGE.replace('%MSG%', phone.fails >= 5 ? 'Muitas tentativas: abra o QR de novo na TV.' : 'Código errado.'));
       });
       return;
     }
-    // The QR code's link carries the code (?c=1234): the page fills it in, so the phone only types the title.
-    var given = /[?&]c=(\d{4})(&|$)/.exec(req.url || ''), page = PHONE_PAGE;
-    if (given) page = page.replace('<input name=code ', '<input type=hidden name=code value=' + given[1] + ' ');
-    res.writeHead(200, {'Content-Type': 'text/html; charset=utf-8'});
-    res.end(page);
+    if (req.method === 'POST' && (path === '/key' || path === '/text')) {
+      if (!pairedBy(req)) { res.writeHead(403); res.end(); return; }
+      body(req, function (f) {
+        if (path === '/key') pressKey(String(f.name || ''));
+        else if (f.q) typeText(String(f.q).slice(0, 100));
+        res.writeHead(204);
+        res.end();
+      });
+      return;
+    }
+    // The QR code's link carries the code (?c=1234): the phone pairs by opening it.
+    var given = /[?&]c=(\d{4})(&|$)/.exec(req.url || '');
+    if (!pairedBy(req) && given && pair(given[1], res)) { res.writeHead(303, {Location: '/'}); res.end(); return; }
+    page(pairedBy(req) ? REMOTE_PAGE : PAIR_PAGE.replace('%MSG%', 'Digite o código que aparece na TV.'));
   });
   phone.server.on('error', function () { phone.server = null; hold(); });
   phone.server.listen(phone.port);
   hold();   // webOS stops an idle service, and the page would go with it
 }
 
-function stopPhone() {
-  if (phone.server) { phone.server.close(); phone.server = null; }
-  hold();
-  phone.code = '';
-  phone.text = '';
-}
-
-/** start: the address and code to show; poll: the text typed since the last poll; stop. */
+/**
+ * remote: keep the page up (on) or not; show: a fresh code and the QR to pair a phone; start/stop: Free My TV's
+ * search is open/closed (text goes there); poll: the text typed since the last poll.
+ */
 service.register('phone', function (message) {
-  var p = message.payload || {};
-  if (p.action === 'start') {
-    startPhone();
-    var url = 'http://' + lanAddress() + ':' + phone.port;
+  var p = message.payload || {}, url = 'http://' + lanAddress() + ':' + phone.port;
+  if (p.clientKey) lastKey = p.clientKey;
+  if (p.action === 'remote') {
+    if (p.on) startServer();
+    else if (phone.server && !phone.searching) { phone.server.close(); phone.server = null; hold(); }
+    message.respond({returnValue: true});
+  } else if (p.action === 'start' || p.action === 'show') {
+    if (p.action === 'start') phone.searching = true;
+    startServer();
+    newCode();
     message.respond({returnValue: !!lanAddress(), url: url, code: phone.code, qr: qrEncode(url + '/?c=' + phone.code)});
   } else if (p.action === 'poll') {
     var text = phone.text;
     phone.text = '';
     message.respond({returnValue: true, text: text, on: !!phone.server});
   } else {
-    stopPhone();
+    phone.searching = false;
+    phone.text = '';
     message.respond({returnValue: true});
   }
 });
