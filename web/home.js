@@ -455,8 +455,8 @@
     buttons.innerHTML = '';
     // Material Symbols Rounded (Apache 2.0) as vectors: sharp at any scale, one stroke weight for the four.
     // Named buttons, as YouTube's and Netflix's: what each does is read, not guessed from an icon.
-    var defs = [['icons/sym-search.svg', 'Pesquisar', 250], ['icons/sym-tune.svg', 'Controles', 240],
-      ['icons/sym-settings.svg', 'Ajustes', 200]];
+    var defs = [['icons/sym-wifi.svg', 'Wi-Fi', 180], ['icons/sym-search.svg', 'Pesquisar', 250],
+      ['icons/sym-tune.svg', 'Controles', 240], ['icons/sym-settings.svg', 'Ajustes', 200]];
     for (var b = 0, x = 1840; b < defs.length; b++) x -= defs[b][2] + (b ? 16 : 0);
     for (b = 0; b < defs.length; b++) {
       var r = el('button', 'round pill', buttons);
@@ -467,6 +467,7 @@
       el('span', 'plabel', r, defs[b][1]);
       hover(r, Z.TOP, NTABS + b);
     }
+    showNetwork();
   }
 
   function renderQuotes() {
@@ -677,9 +678,21 @@
     return kbps === undefined ? '—' : kbps >= 1000 ? decimal(kbps / 1000) + ' Mb/s' : kbps + ' kb/s';
   }
 
+  /** The network button: Wi-Fi or cable when connected, red "Sem rede" when not; OK opens the network settings. */
+  function showNetwork() {
+    var button = $('buttons').children[0], net = lastStats && lastStats.net;
+    if (!button) return;
+    var down = !!net && !net.up, wired = !!net && net.kind === 'ethernet';
+    setClass(button, 'offline', down);
+    button.querySelector('.plabel').textContent = down ? 'Sem rede' : wired ? 'Cabo' : 'Wi-Fi';
+    var icon = 'icons/sym-' + (down ? 'wifi_off' : wired ? 'lan' : 'wifi') + '.svg', s = button.querySelector('.sym');
+    s.style.webkitMaskImage = s.style.maskImage = 'url(' + icon + ')';
+  }
+
   /** The top shows only what's off (a busy CPU, full RAM, no network); the drawer's panel shows everything. */
   function showStats(s) {
     lastStats = s;
+    showNetwork();
     var box = $('stats');
     if (box) {
       var parts = [], share = s && s.mem ? Math.round(s.mem.usedMb / s.mem.totalMb * 100) : 0;
@@ -687,7 +700,6 @@
         parts.push('<span class="stat' + level(s.cpu, 70, 90) + '"><b>CPU</b> ' + s.cpu + '%</span>');
       }
       if (s && s.mem && level(share, 92, 97)) parts.push('<span class="stat' + level(share, 92, 97) + '"><b>RAM</b> ' + share + '%</span>');
-      if (s && s.net && !s.net.up) parts.push('<span class="stat alarm"><i class="dot"></i><b>SEM REDE</b></span>');
       box.innerHTML = parts.join('');
       box.style.display = parts.length ? '' : 'none';
     }
@@ -1018,7 +1030,7 @@
   function closeControls() {
     setClass($('controls'), 'open', false);
     st.zone = Z.TOP;
-    st.top = NTABS + 1;
+    st.top = NTABS + 2;
     updateFocus();
   }
 
@@ -1479,7 +1491,7 @@
     srShown = [];
     srAll = [];
     st.zone = Z.TOP;
-    st.top = NTABS;
+    st.top = NTABS + 1;
     updateFocus();
   }
 
@@ -2463,8 +2475,9 @@
     switch (st.zone) {
       case Z.TOP:
         if (st.top < NTABS) return;
-        if (st.top === NTABS) openSearch();
-        else if (st.top === NTABS + 1) openControls();
+        if (st.top === NTABS) TV.networkSettings(function (ok) { if (!ok) toast('Não deu para abrir a rede da TV.'); });
+        else if (st.top === NTABS + 1) openSearch();
+        else if (st.top === NTABS + 2) openControls();
         else openSettings();
         return;
       case Z.CARDS:
@@ -2547,7 +2560,7 @@
         break;
       case Z.TOP:
         if (dx) {
-          st.top = Math.max(Data.hasKey() ? 0 : NTABS, Math.min(NTABS + 2, st.top + dx));   // without the picks the tabs can't hold focus
+          st.top = Math.max(Data.hasKey() ? 0 : NTABS, Math.min(NTABS + 3, st.top + dx));   // without the picks the tabs can't hold focus
           if (st.top < NTABS) selectTab(st.top);   // as on Apple TV: focusing a tab selects it
         } else if (dy > 0) {
           if (cards.length) { st.zone = Z.CARDS; st.card = Math.min(cards.length - 1, st.top < NTABS ? 0 : cards.length - 1); }

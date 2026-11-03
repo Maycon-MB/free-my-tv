@@ -668,6 +668,12 @@ var TV = (function () {
       else this.launch('com.palm.app.settings', null, done);
     },
 
+    /** The TV's network settings (LG's settings app opened on its network page), to change the Wi-Fi. */
+    networkSettings: function (done) {
+      if (samsung) samsungSettings(done);
+      else this.launch('com.palm.app.settings', {target: 'network'}, done);
+    },
+
     /** The TV's model, firmware, system, IP address and this app's version, for About this TV. */
     about: about,
 

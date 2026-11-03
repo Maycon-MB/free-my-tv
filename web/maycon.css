@@ -530,3 +530,9 @@ body:not(.night) #morehint { color: #6E6E73; }
 }
 #searchpage .appicon img { width: 46px; height: 46px; vertical-align: top; }
 #searchpage .appicon.netflix img { width: 24px; height: 36px; margin: 5px 11px; }
+
+/* The network button turns red when the TV is offline, so it's seen from the couch. */
+.night #buttons .round.pill.offline { background: #3A1214; border-color: #E5484D; color: #FF7A7F; }
+/* With four named buttons at the top right, the headline goes to the tabs' row, right of the match. */
+#news { left: 1150px; top: 176px; width: 690px; text-align: right; }
+#news .title { max-width: 580px; }
