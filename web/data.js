@@ -699,18 +699,21 @@ var Data = (function () {
   var trailers = {}, titleLinks = {};
 
   /**
-   * Services whose webOS app opens a title from a launch link: Wikidata id properties (movie, show) and the link.
-   * Only Netflix's form is known to work; Disney+ hung half-loaded on a web address (webOS 25), so the rest open
-   * on their home until a working form is found.
+   * Services whose webOS app opens a title from launch params: Wikidata id properties and the params. Netflix's form
+   * is the community's; Disney+'s is what LG's own search sends it (browse id, P13902), tested on webOS 25. Others
+   * open on their home: a web address left Disney+ half-loaded, so no form is guessed.
    */
   var TITLE_LINKS = {
-    netflix: [['P1874'], function (id) { return 'm=https://www.netflix.com/title/' + id + '&source_type=4'; }]
+    netflix: [['P1874'], function (id) { return {contentTarget: 'm=https://www.netflix.com/title/' + id + '&source_type=4'}; }],
+    disney: [['P13902'], function (id) {
+      return /^entity-[\w-]+$/.test(id) ? {handledBy: 'app', contentTarget: 'page=browse&id=' + id + '&distributionPartner=lg'} : null;
+    }]
   };
 
-  /** The contentTarget that opens a title in its service's app: done(target or ''). */
+  /** The launch params that open a title in its service's app: done(params or null). */
   function titleLink(p, service, done) {
     var spec = TITLE_LINKS[service], k = service + ':' + keyOf(p);
-    if (!spec) { done(''); return; }
+    if (!spec) { done(null); return; }
     if (titleLinks[k] !== undefined) { done(titleLinks[k]); return; }
     var tmdbProp = p.kind === 'tv' ? 'P4983' : 'P4947', alts = [];
     for (var i = 0; i < spec[0].length; i++) alts.push('{ ?i wdt:' + spec[0][i] + ' ?n }');
@@ -719,7 +722,7 @@ var Data = (function () {
         function (err, o) {
       var b = !err && o && o.results && o.results.bindings && o.results.bindings[0];
       var id = b && b.n && /^[\w.:\/-]+$/.test(b.n.value) ? b.n.value : '';
-      titleLinks[k] = id ? spec[1](id, p.kind) : '';
+      titleLinks[k] = id ? spec[1](id, p.kind) : null;
       done(titleLinks[k]);
     });
   }

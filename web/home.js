@@ -283,10 +283,10 @@
     if (Date.now() - opening < 10000) return true;
     opening = Date.now();
     toast('Abrindo ' + app.title + '…');
-    Data.titleLink(p, p.app, function (target) {
+    Data.titleLink(p, p.app, function (params) {
       opening = 0;
-      launcher(app.id, app.title, target ? {contentTarget: target} : null)();
-      if (!target) toast('Abrindo ' + app.title + ': procure “' + p.title + '” lá dentro.');
+      launcher(app.id, app.title, params)();
+      if (!params) toast('Abrindo ' + app.title + ': procure “' + p.title + '” lá dentro.');
     });
     return true;
   }
@@ -438,7 +438,7 @@
     buttons.innerHTML = '';
     // Material Symbols Rounded (Apache 2.0) as vectors: sharp at any scale, one stroke weight for the four.
     var defs = [['icons/sym-search.svg', 'Pesquisar'], ['icons/sym-tune.svg', 'Controles'],
-      ['icons/sym-live_tv.svg', tr('light|Live TV')], ['icons/sym-settings_input_hdmi.svg', tr('HDMI Inputs')],
+      ['icons/sym-live_tv.svg', tr('light|Live TV')], ['icons/sym-settings_input_hdmi.svg', 'Entradas e ajustes'],
       ['icons/sym-settings.svg', tr('light|Settings')]];
     for (var b = 0; b < defs.length; b++) {
       var r = el('button', 'round' + (b === defs.length - 1 ? ' last' : ''), buttons);
@@ -851,8 +851,8 @@
   var HELP_ROWS = [
     ['Apps', 'na fileira de baixo; ← → percorre, OK abre'],
     ['Mover um app', 'segure OK nele e use ← →; OK solta'],
-    ['Entradas (HDMI, TV)', 'aperte ▼ na fileira de apps'],
-    ['Ajustes da TV', 'aperte ▼ e vá até Ajustes da TV'],
+    ['Entradas (HDMI, TV)', '4º botão do topo: Entradas e ajustes'],
+    ['Ajustes da TV', 'no mesmo 4º botão do topo'],
     ['Pesquisar', 'lupa no topo (ou pelo celular, pelo QR code)'],
     ['Trailer', 'segure OK num filme ou série'],
     ['Controles', '2º botão do topo: só o som, timer, internet'],
@@ -2360,7 +2360,7 @@
     switch (st.zone) {
       case Z.SHELF:
         if (dx) st.shelf = Math.max(0, Math.min(shelf.length - 1, st.shelf + dx));
-        else if (dy > 0) { openDrawer(); return; }
+        else if (dy > 0) return;   // the drawer opens from the Inputs button at the top, not from an arrow
         else if (dy < 0) {
           if (cards.length) { st.zone = Z.CARDS; st.card = nearest(cardNodes, centerX(tiles[st.shelf])); }
           else { st.zone = Z.TOP; st.top = Data.hasKey() ? st.tab : 3; }
