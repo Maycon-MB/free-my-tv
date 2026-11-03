@@ -699,19 +699,12 @@ var Data = (function () {
   var trailers = {}, titleLinks = {};
 
   /**
-   * Each service's Wikidata id properties (movie, show) and how its webOS app is sent to the title. Netflix's form is
-   * documented by the community; the others are the service's web address, which an app that doesn't take it ignores
-   * (it opens on its home, as without a link).
+   * Services whose webOS app opens a title from a launch link: Wikidata id properties (movie, show) and the link.
+   * Only Netflix's form is known to work; Disney+ hung half-loaded on a web address (webOS 25), so the rest open
+   * on their home until a working form is found.
    */
   var TITLE_LINKS = {
-    netflix: [['P1874'], function (id) { return 'm=https://www.netflix.com/title/' + id + '&source_type=4'; }],
-    prime: [['P14462', 'P8055'], function (id) { return /^amzn1\./.test(id) ? id : 'https://www.primevideo.com/detail/' + id; }],
-    disney: [['P7595', 'P7596'], function (id, kind) {
-      return 'https://www.disneyplus.com/' + (kind === 'tv' ? 'series/wp/' : 'movies/wd/') + id;
-    }],
-    max: [['P8298'], function (id) { return 'https://play.max.com/' + id; }],
-    appletv: [['P9586', 'P9751'], function (id, kind) { return 'https://tv.apple.com/' + (kind === 'tv' ? 'show/' : 'movie/') + id; }],
-    globoplay: [['P12356'], function (id) { return 'https://globoplay.globo.com/-/t/' + id + '/'; }]
+    netflix: [['P1874'], function (id) { return 'm=https://www.netflix.com/title/' + id + '&source_type=4'; }]
   };
 
   /** The contentTarget that opens a title in its service's app: done(target or ''). */
