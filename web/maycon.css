@@ -486,3 +486,6 @@ body:not(.night) #morehint { color: #6E6E73; }
 .night.bg-photo #sky .veil { background: rgba(11, 11, 13, 0.62); }
 .night.bg-stars #sky canvas.on, .night.bg-glow #sky canvas.on, .night.bg-plain #sky canvas.on { opacity: 0; }
 #sky #stars { opacity: 1 !important; }
+
+/* Named top buttons sit side by side: the focused one fills with the accent but doesn't grow over its neighbor. */
+#buttons .round.pill.focus { -webkit-transform: none; transform: none; z-index: 2; }
