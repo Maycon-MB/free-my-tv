@@ -830,7 +830,7 @@ function watchForeground() {
     },
     end: function () {
       back.conn = null;
-      if (back.on) back.retry = setTimeout(watchForeground, 10000);   // the TV's API restarts now and then
+      if (back.on) back.retry = setTimeout(watchForeground, 2000);   // the TV's API drops it now and then
     }
   });
 }
