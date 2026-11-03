@@ -23,6 +23,7 @@ Tudo à vista, sem gesto escondido (o padrão de Netflix e YouTube):
 | Visual | Logos vetoriais e ícones Material Symbols; nome do app focado; até 3 times e F1 no topo | `web/home.js` |
 | Navegação | Botões do topo com nome; ▼ para a fileira de entradas e ajustes; só entradas com algo ligado | `web/home.js` |
 | Navegação | Página do título com Assistir, Trailer e + Minha lista; aba Minha lista (salvos e recentes) | `web/home.js` |
+| Navegação | Séries da Minha lista com selo de novo episódio (últimos 7 dias) ou do próximo (dia da semana) | `web/data.js`, `web/home.js` |
 | Navegação | Volta sempre ao Free My TV quando a home da LG aparece (serviço assina o app em primeiro plano) | `webos/service/service.js` |
 | Apps | Todos os apps na fileira; segurar OK move; ordem manual ou mais usados; Claro tv+ reconhecido | `web/home.js`, `web/data.js` |
 | Apps | Abre no título: Netflix (Wikidata P1874) e Disney+ (P13902, formato da busca da LG); os demais na tela inicial | `web/data.js` |
@@ -63,7 +64,8 @@ A sessão dura 1000 h e, se acabar, a TV apaga o app. Três renovações, nenhum
    `ResetDevModeSession` da LG uma vez por dia, quando o app abre. Confirmado na TV em 2026-11-02.
 2. **GitHub** (reserva): o repositório privado `Maycon-MB/tv-devmode-renovar` renova toda segunda, com o token no
    segredo `LG_DEVMODE_TOKEN`.
-3. **Notebook** (redundante): `%USERPROFILE%\.freemytvenovar-devmode.ps1` pela tarefa `FreeMyTV-RenovarDevMode`.
+3. **Notebook** (redundante): `%USERPROFILE%\.freemytv
+enovar-devmode.ps1` pela tarefa `FreeMyTV-RenovarDevMode`.
 
 Se o Developer Mode for desligado e ligado de novo, o token muda: atualize o segredo do GitHub. O token nunca entra
 neste repositório.
