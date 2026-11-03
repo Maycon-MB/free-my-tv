@@ -480,3 +480,9 @@ body:not(.night) #morehint { color: #6E6E73; }
 
 /* A profile without the extras: no headlines or sports at the top. */
 .no-extras #news, .no-extras #football { display: none; }
+
+/* Backgrounds per profile: the photo of the highlighted title shows through more; plain hides the canvas. */
+.bg-photo #sky #stars, .bg-plain #sky #stars { display: none; }
+.night.bg-photo #sky .veil { background: rgba(11, 11, 13, 0.62); }
+.night.bg-stars #sky canvas.on, .night.bg-glow #sky canvas.on, .night.bg-plain #sky canvas.on { opacity: 0; }
+#sky #stars { opacity: 1 !important; }

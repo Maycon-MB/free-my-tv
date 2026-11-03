@@ -726,11 +726,11 @@
 
   // MARK: - Profiles: each keeps its own shelf order, theme, accent color and kids mode
 
-  var PROFILE_KEYS = ['shelf', 'theme', 'accent', 'kids', 'helped', 'mylist', 'recent', 'extras', 'showPerf'];
+  var PROFILE_KEYS = ['shelf', 'theme', 'accent', 'kids', 'helped', 'mylist', 'recent', 'extras', 'showPerf', 'bg', 'starsMove'];
   var PROFILE_NAMES = ['Maycon', 'Família', 'Crianças', 'Visitas', 'Convidado'];
-  var ACCENTS = [['red', 'Vermelho'], ['blue', 'Azul'], ['green', 'Verde'], ['purple', 'Roxo'], ['orange', 'Laranja'],
-    ['yellow', 'Amarelo']];
-  var ACCENT_RGB = {red: '229,72,77', blue: '59,130,246', green: '34,197,94', purple: '139,92,246', orange: '249,115,22',
+  var ACCENTS = [['red', 'Vermelho'], ['pink', 'Rosa'], ['blue', 'Azul'], ['green', 'Verde'], ['purple', 'Roxo'],
+    ['orange', 'Laranja'], ['yellow', 'Amarelo']];
+  var ACCENT_RGB = {red: '229,72,77', pink: '236,72,153', blue: '59,130,246', green: '34,197,94', purple: '139,92,246', orange: '249,115,22',
     yellow: '255,225,0'};
   var deleteArmed = false;
 
@@ -772,6 +772,11 @@
   /** Headlines and sports at the top, per profile: off leaves the title, tabs and buttons only. */
   function applyExtras() {
     setClass(body, 'no-extras', !Prefs.get('extras', true));
+  }
+
+  function backgroundName() {
+    for (var i = 0; i < BACKGROUNDS.length; i++) if (BACKGROUNDS[i][0] === Prefs.get('bg', 'stars')) return BACKGROUNDS[i][1];
+    return BACKGROUNDS[0][1];
   }
 
   function applyAccent() {
@@ -1185,7 +1190,8 @@
     }
     paintStars(canvas);
     clearInterval(starTimer);
-    if (Prefs.get('starsMove', false)) starTimer = setInterval(stepStars, 1000 / STAR_FPS);
+    applyBackground();
+    if (Prefs.get('bg', 'stars') === 'stars' && Prefs.get('starsMove', true)) starTimer = setInterval(stepStars, 1000 / STAR_FPS);
   }
 
   function stepStars() {
@@ -1199,7 +1205,32 @@
     paintStars(canvas);
   }
 
+  // Backgrounds a profile picks: the constellation, glows in its accent, the highlighted title's photo, or plain.
+  var BACKGROUNDS = [['stars', 'Constelação'], ['glow', 'Gradiente'], ['photo', 'Foto do destaque'], ['plain', 'Liso']];
+
+  function applyBackground() {
+    var kind = Prefs.get('bg', 'stars');
+    body.className = body.className.replace(/\s*bg-\w+/g, '') + ' bg-' + kind;
+    if (kind === 'glow') paintGlow($('stars'));
+    else if (kind !== 'stars') $('stars').getContext('2d').clearRect(0, 0, 960, 540);
+  }
+
+  /** Two soft glows in the accent, drawn once: a gradient without CSS variables, which old TVs lack. */
+  function paintGlow(canvas) {
+    var g = canvas.getContext('2d'), rgb = ACCENT_RGB[Prefs.get('accent', 'red')] || ACCENT_RGB.red;
+    g.clearRect(0, 0, canvas.width, canvas.height);
+    var spots = [[820, 40, 520, 0.34], [80, 470, 420, 0.22]];
+    for (var i = 0; i < spots.length; i++) {
+      var s = spots[i], grad = g.createRadialGradient(s[0], s[1], 0, s[0], s[1], s[2]);
+      grad.addColorStop(0, 'rgba(' + rgb + ',' + s[3] + ')');
+      grad.addColorStop(1, 'rgba(' + rgb + ',0)');
+      g.fillStyle = grad;
+      g.fillRect(0, 0, canvas.width, canvas.height);
+    }
+  }
+
   function paintStars(canvas) {
+    if (Prefs.get('bg', 'stars') !== 'stars') return;
     var g = canvas.getContext('2d'), w = canvas.width, h = canvas.height, reach = 110, pts = stars, i;
     var rgb = ACCENT_RGB[Prefs.get('accent', 'red')] || ACCENT_RGB.red;
     g.clearRect(0, 0, w, h);
@@ -1689,8 +1720,10 @@
         }},
       {label: 'Destaque girando', toggle: Prefs.get('rotate', true),
         step: function () { Prefs.set('rotate', !Prefs.get('rotate', true)); }},
-      {label: 'Fundo animado', toggle: Prefs.get('starsMove', false),
-        step: function () { Prefs.set('starsMove', !Prefs.get('starsMove', false)); drawStars(); }},
+      {label: 'Fundo', value: backgroundName(),
+        step: function (d) { cycle('bg', BACKGROUNDS.map(function (b) { return b[0]; }), Prefs.get('bg', 'stars'), d); drawStars(); }},
+      {label: 'Constelação em movimento', toggle: Prefs.get('starsMove', true), dim: Prefs.get('bg', 'stars') !== 'stars',
+        step: function () { Prefs.set('starsMove', !Prefs.get('starsMove', true)); drawStars(); }},
       {label: tr('Watch from the screensaver'), toggle: Prefs.saverWatch(),
         step: function () { Prefs.set('saverWatch', !Prefs.saverWatch()); }},
       {label: tr('Weather widget'), toggle: Prefs.weather(),

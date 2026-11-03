@@ -9,7 +9,8 @@ import os
 import re
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PALETTE = {'blue': ('#3B82F6', '#7FB0FF', '59, 130, 246'), 'green': ('#22C55E', '#6EE7A0', '34, 197, 94'),
+PALETTE = {'pink': ('#EC4899', '#F9A8D4', '236, 72, 153'), 'blue': ('#3B82F6', '#7FB0FF', '59, 130, 246'),
+           'green': ('#22C55E', '#6EE7A0', '34, 197, 94'),
            'purple': ('#8B5CF6', '#B9A0FF', '139, 92, 246'), 'orange': ('#F97316', '#FFAB70', '249, 115, 22'),
            'yellow': ('#FFE100', '#FFE97A', '255, 225, 0')}
 RED = ('#E5484D', '#FF7A7F', '229, 72, 77')
