@@ -343,6 +343,8 @@ var Data = (function () {
     ['peacock', 'peacock', /peacock/, /peacock/i, 'Peacock'],
     ['globoplay', 'globoplay', /globoplay/, /globoplay/i, 'Globoplay'],
     ['claro', 'claro', /claro/, /claro/i, 'Claro tv+'],   // TMDB: Claro tv+ (484) and Claro video (167)
+    ['pluto', 'pluto', /pluto/, /pluto/i, 'Pluto TV'],   // free with ads: TMDB lists it under "ads"/"free"
+    ['mercado play', 'mercadoplay', /mercadoplay/, /mercado ?play/i, 'Mercado Play'],
     ['max', 'max', /hbo|wbd|\.max/, /^(hbo )?max$|hbo max/i, 'Max'],
     ['apple tv', 'appletv', /appletv|apple\.tv/, /apple tv/i, 'Apple TV'],
     ['hotstar', 'hotstar', /hotstar/, /hotstar/i, 'JioHotstar'],
@@ -499,13 +501,9 @@ var Data = (function () {
       } else if (p.kind === 'tv' && o.number_of_seasons > 0) {
         parts.push(plural('plural|one:{n} season|other:{n} seasons', o.number_of_seasons));
       }
-      var wp = o['watch/providers'], here = wp && wp.results && wp.results[REGION], flat = here && here.flatrate;
-      p.app = null;
-      for (var i = 0; flat && i < flat.length && !p.app; i++) {
-        var s = service(flat[i].provider_name, flat[i].provider_id);
-        if (s && usable(s[1])) { p.app = s[1]; p.service = s[4]; }
-      }
-      if (p.service && p.app) parts.push(p.service);
+      var wp = o['watch/providers'];
+      placeTitle(p, wp && wp.results && wp.results[REGION]);
+      if (p.app) parts.push(p.service);
       p.meta = parts.join(' · ');
       title(p, o, function () {
         p.detailed = true;
@@ -579,7 +577,7 @@ var Data = (function () {
         if (s && usable(s[1])) ids.push(res.results[i].provider_id);
       }
       if (!ids.length) { done(new Error("none of the TV's streaming apps are on TMDB (or switched on in Picks from)")); return; }
-      var common = '&language=' + lang() + '&watch_region=' + REGION + '&with_watch_monetization_types=flatrate&include_adult=false'
+      var common = '&language=' + lang() + '&watch_region=' + REGION + '&with_watch_monetization_types=flatrate%7Cfree%7Cads&include_adult=false'
           + '&sort_by=popularity.desc&with_watch_providers=' + encodeURIComponent(ids.join('|'))
           + (Prefs.hideAnimation() ? '&without_genres=' + ANIMATION : '');
       var hot = {movie: [], tv: []}, fresh = {movie: [], tv: []};
@@ -681,17 +679,37 @@ var Data = (function () {
   }
 
   /** The streaming service of a found title, among the ones this TV has (p.app, p.service), or none. */
+  /**
+   * Where a title streams here, from TMDB's providers for the region: p.apps (services whose app the TV has, the most
+   * launched first), p.app and p.service (the first), p.elsewhere (services without the app), p.paid (rent/buy).
+   * Subscription, free and free-with-ads all count: Pluto TV and Mercado Play are the last two.
+   */
+  function placeTitle(p, here) {
+    var offers = [].concat((here && here.flatrate) || [], (here && here.free) || [], (here && here.ads) || []);
+    var usage = Prefs.get('usage', {}), apps = [], elsewhere = [];
+    for (var i = 0; i < offers.length; i++) {
+      var s = service(offers[i].provider_name, offers[i].provider_id);
+      if (!s) continue;
+      if (usable(s[1])) { if (apps.indexOf(s[1]) < 0) apps.push(s[1]); } else if (elsewhere.indexOf(s[4]) < 0) elsewhere.push(s[4]);
+    }
+    function launches(key) { var a = appFor(key); return a ? usage[a.id] || 0 : 0; }
+    apps.sort(function (a, b) { return launches(b) - launches(a); });
+    p.apps = apps;
+    p.app = apps[0] || null;
+    p.service = p.app ? serviceName(p.app) : elsewhere[0] || '';
+    p.elsewhere = elsewhere;
+    var rent = here && here.rent && here.rent.length, buy = here && here.buy && here.buy.length;
+    p.paid = rent && buy ? 'Alugar ou comprar' : rent ? 'Alugar' : buy ? 'Comprar' : '';
+  }
+
+  function serviceName(key) {
+    for (var i = 0; i < SERVICES.length; i++) if (SERVICES[i][1] === key) return SERVICES[i][4];
+    return key;
+  }
+
   function streamsOn(p, done) {
     tmdb('/' + p.kind + '/' + p.id + '/watch/providers', function (err, o) {
-      var here = !err && o && o.results && o.results[REGION], flat = (here && here.flatrate) || [];
-      var rent = here && here.rent && here.rent.length, buy = here && here.buy && here.buy.length;
-      p.paid = rent && buy ? 'Alugar ou comprar' : rent ? 'Alugar' : buy ? 'Comprar' : '';
-      for (var i = 0; i < flat.length; i++) {
-        var s = service(flat[i].provider_name, flat[i].provider_id);
-        if (!s) continue;
-        if (!p.service) p.service = s[4];
-        if (usable(s[1])) { p.app = s[1]; p.service = s[4]; break; }
-      }
+      placeTitle(p, !err && o && o.results && o.results[REGION]);
       done();
     });
   }
@@ -893,9 +911,12 @@ var Data = (function () {
             function (err, o) {
           if (seq !== searchSeq) return;
           var results = (o && o.results) || [], who = null;
-          // The person whose name is what was typed, even below a documentary with that name in its title.
+          // A person whose name is what was typed ("Tom Hanks"), even below a documentary with the name in its
+          // title; but a title that looks like the query before them wins ("Kill Bill" is also an artist).
           for (var j = 0; j < results.length && j < 6 && !who; j++) {
-            if (results[j].media_type === 'person' && likeness(results[j].name, query) > 0.85) who = results[j];
+            var r0 = results[j];
+            if (r0.media_type === 'person') { if (likeness(r0.name, query) > 0.85) who = r0; continue; }
+            if (likeness(r0.title || r0.name, query) > 0.6 || likeness(r0.original_title || r0.original_name, query) > 0.6) break;
           }
           if (who) {
             personTitles(who, names, function (e, list) { finish(e, list, who.name); });
@@ -929,6 +950,7 @@ var Data = (function () {
     titleLink: titleLink,
     trailer: trailer,
     episodes: episodes,
+    serviceName: serviceName,
     services: services,
     refresh: function () { refreshWeather(); refreshPrices(); refreshRecs(); },
     settingsChanged: function () { pricesAt = 0; refreshPrices(); changed(); },

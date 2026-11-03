@@ -507,3 +507,26 @@ body:not(.night) #morehint { color: #6E6E73; }
 }
 .card .epbadge.fresh { background: #E5484D; color: #FFF; }
 #detail .depisode { margin-top: 14px; font-size: 26px; font-weight: 700; color: #FF7A7F; }
+
+#detail .delse { margin-top: 10px; font-size: 24px; color: #8C8C96; }
+
+/* Search results: the icons of the apps that have the title, in the poster's top left corner. */
+#searchpage .poster { position: relative; }
+#searchpage .appicons { position: absolute; left: 10px; top: 10px; white-space: nowrap; }
+#searchpage .appicon {
+  display: inline-block;
+  width: 46px;
+  height: 46px;
+  margin-right: 6px;
+  border-radius: 11px;
+  overflow: hidden;
+  background: #0B0B0D;
+  text-align: center;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 46px;
+  color: #FFF;
+  vertical-align: top;
+}
+#searchpage .appicon img { width: 46px; height: 46px; vertical-align: top; }
+#searchpage .appicon.netflix img { width: 24px; height: 36px; margin: 5px 11px; }

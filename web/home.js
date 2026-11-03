@@ -274,6 +274,20 @@
     else { badge.className += ' word'; badge.textContent = p.service; }
   }
 
+  /** The icons of the TV's apps a title streams on (up to 3), in a poster's corner: recognized before read. */
+  function appIcons(p, holder) {
+    var keys = p.apps || (p.app ? [p.app] : []), box = null;
+    for (var i = 0; i < keys.length && i < 3; i++) {
+      var app = Data.appFor(keys[i]);
+      if (!app) continue;
+      if (!box) box = el('div', 'appicons', holder);
+      var icon = el('div', 'appicon' + (keys[i] === 'netflix' ? ' netflix' : ''), box);
+      if (keys[i] === 'netflix') el('img', '', icon).src = BRAND_LOGOS.netflix;
+      else if (app.icon) el('img', '', icon).src = app.icon;
+      else icon.textContent = app.title.charAt(0);
+    }
+  }
+
   /** Opens a title in its app, on the title's page when Wikidata knows its id there (else on the app's home). */
   var opening = 0;
 
@@ -870,8 +884,20 @@
   var dtTitle = null, dtFrom = null, dtButton = 0;
 
   function detailButtons() {
-    var p = dtTitle, app = p && p.app && Data.appFor(p.app), out = [];
-    if (app) out.push({label: '▶  Assistir no ' + app.title, run: function () { closeDetail(); openTitle(p, app, null); }});
+    var p = dtTitle, out = [], keys = (p && (p.apps || (p.app ? [p.app] : []))) || [];
+    for (var i = 0; i < keys.length && out.length < 3; i++) {
+      (function (key) {
+        var app = Data.appFor(key);
+        if (!app) return;
+        out.push({label: (out.length ? '▶  ' : '▶  Assistir no ') + app.title, run: function () {
+          closeDetail();
+          var q = {};
+          for (var k in p) if (p.hasOwnProperty(k)) q[k] = p[k];
+          q.app = key;   // the link for the app picked, not the first one
+          openTitle(q, app, null);
+        }});
+      })(keys[i]);
+    }
     out.push({label: 'Trailer', run: function () { closeDetail(); playTrailerOf(p); }});
     out.push({label: inMyList(p) ? '✓ Na minha lista' : '+ Minha lista', run: function () {
       toggleMyList(p);
@@ -893,7 +919,9 @@
     el('div', 'shade', page);
     var info = el('div', 'info', page);
     el('div', 'dtitle', info, p.title);
-    var where = app ? 'No ' + app.title : p.service ? 'Na ' + p.service + ' (app não instalado)' : p.paid ? p.paid : 'Sem streaming no Brasil';
+    var count = (p.apps || []).length;
+    var where = app ? (count > 1 ? 'Em ' + count + ' dos seus apps' : 'No ' + app.title)
+      : p.service ? 'Na ' + p.service + ' (app não instalado)' : p.paid ? p.paid : 'Sem streaming no Brasil';
     var about = (p.meta || (p.genres || []).slice(0, 2).join(' · ')).replace(' · ' + p.service, '');   // the service is in 'where'
     el('div', 'dmeta', info, [p.year, about, where].filter(function (x) { return x; }).join('  ·  '));
     if (p.kind === 'tv') {
@@ -901,6 +929,7 @@
         if (n && dtTitle === p) el('div', 'depisode', info, n.state === 'new' ? episodeText(n) : 'Próximo episódio: ' + episodeText(n));
       });
     }
+    if (app && p.elsewhere && p.elsewhere.length) el('div', 'delse', info, 'Também em ' + p.elsewhere.slice(0, 3).join(', ') + ' (sem o app)');
     var row = el('div', 'dbtns', info), buttons = detailButtons();
     for (var i = 0; i < buttons.length; i++) hover(el('div', 'dbtn' + (i === 0 && app ? ' primary' : ''), row, buttons[i].label), Z.DETAIL, i);
     st.zone = Z.DETAIL;
@@ -1350,9 +1379,12 @@
       var p = srShown[i], item = el('div', 'sitem', grid), app = p.app && Data.appFor(p.app);
       item.style.left = (90 + (i % SEARCH_COLS) * 296) + 'px';
       item.style.top = (Math.floor(i / SEARCH_COLS) * SEARCH_ROW) + 'px';
-      el('div', 'poster', item).style.backgroundImage = 'url("' + Data.image(p.poster, 'w342') + '")';
+      var poster = el('div', 'poster', item);
+      poster.style.backgroundImage = 'url("' + Data.image(p.poster, 'w342') + '")';
+      appIcons(p, poster);
       el('div', 'stitle', item, p.title);
-      var where = app ? app.title : p.service ? p.service + ' (não instalado)' : p.paid ? '' : 'Sem streaming';
+      var more = (p.apps || []).length - 1;
+      var where = app ? app.title + (more > 0 ? ' +' + more : '') : p.service ? p.service + ' (não instalado)' : p.paid ? '' : 'Sem streaming';
       var meta = el('div', 'smeta' + (app ? ' mine' : ''), item, (p.year ? p.year + (where ? ' · ' : '') : '') + where);
       if (!app && p.paid) el('span', 'paid', meta, p.paid);   // only to rent or buy: said at the line's right end
       hover(item, Z.SEARCH, 2000 + i);
