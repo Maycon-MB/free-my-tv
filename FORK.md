@@ -35,10 +35,11 @@ Tudo à vista, sem gesto escondido (o padrão de Netflix e YouTube):
 | Explorar | Até 6 títulos, o que passa no Brasil primeiro, selo com o ícone do app, destaque girando | `web/data.js`, `web/home.js` |
 | Perfis | Ordem dos apps, tema, cor, fundo, modo infantil, lista, recentes, notícias/esportes e painel de desempenho | `web/home.js` |
 | Esportes | Times escolhidos pelo controle (ESPN), aviso de gol e lembrete 10 min antes, por cima de outros apps | `webos/service/service.js` |
-| Controles | Botão Controles: só o som (apaga a tela), timer que desliga a TV, teste de velocidade | `web/home.js`, `web/tv.js` |
+| Controles | Botão Controles: controle pelo celular, só o som (apaga a tela), timer que desliga a TV, teste de velocidade | `web/home.js`, `web/tv.js` |
+| Celular | Controle remoto completo (setas, OK, Voltar, Início, volume, play, digitar) em qualquer app; pareia uma vez pelo QR (porta 8770, token guardado) | `webos/service/service.js` |
 | TV | Painel de desempenho (CPU, RAM, swap, rede de `/proc`); manchetes do ge e g1 no topo | `webos/service/service.js` |
 | TV | Developer Mode renovado pela própria TV, uma vez por dia; backup das configurações; app como entrada | `webos/service/service.js`, `webos/backup.py` |
-| Memória | Fotos em 1280 px, liberadas ao sair; pesquisa e página do título soltam as imagens ao fechar | `web/home.js` |
+| Memória | Fotos em 1280 px, liberadas ao sair; só o cartão em destaque guarda a foto grande; pesquisa e página do título soltam as imagens ao fechar | `web/home.js` |
 
 ## Instalar nesta TV
 
@@ -78,7 +79,8 @@ neste repositório.
 Confirmado (webOS 25): renovação pela TV, volta ao Free My TV pelo Home, Netflix e Disney+ no título, trailer,
 pesquisa pelo celular e QR code, manchetes, F1, futebol, permissões da API de controle remoto.
 
-A testar: ícone de rede e barras de sinal (instalação pendente: a TV estava desligada), timer até desligar, só o som, aviso de gol com jogo ao vivo, a TV ligando no app pela "última entrada"
+A testar (instalação pendente: a TV estava desligada): controle pelo celular (a TV pede Permitir de novo pelas
+permissões de teclado e ponteiro), ícone de rede e barras de sinal, medir a memória, timer até desligar, só o som, aviso de gol com jogo ao vivo, a TV ligando no app pela "última entrada"
 (inclusive depois de tirar da tomada) e o roteiro de abrir no título em outros apps (fim deste arquivo).
 
 ## Atualizar com o original
