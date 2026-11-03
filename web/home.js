@@ -2355,6 +2355,7 @@
   }
 
   function move(dx, dy) {
+    if (st.zone === Z.HELP) closeHelp();   // the guide never holds the arrows: they close it and move on
     var tiles = $('tiles').children, cardNodes = $('cards').children;
     switch (st.zone) {
       case Z.SHELF:
