@@ -11,12 +11,14 @@ webOS 25 com 1,2 GB de RAM. O README e o CLAUDE.md do original continuam valendo
 | Logos vetoriais nos apps conhecidos, nome do app focado, todos os apps na prateleira | `web/home.js` |
 | Segurar OK num app (tecla ou ponteiro) move ele; ← → muda a posição, OK solta | `web/home.js` |
 | Pesquisa no TMDB com filtros (tipo, gênero, só meus apps) e aviso de aluguel/compra | `web/home.js`, `web/data.js` |
-| Abre direto no título: Netflix (testado), Prime, Disney+, Max, Apple TV, Globoplay (a testar), ids do Wikidata | `web/data.js`, `web/home.js` |
+| Netflix abre direto no título (id do Wikidata); os outros abrem na tela inicial do app (Disney+ travou com link web) | `web/data.js`, `web/home.js` |
 | Segurar OK num título do Explorar ou da pesquisa abre o trailer no YouTube | `web/data.js`, `web/home.js` |
 | Pesquisa sem texto mostra os títulos abertos recentemente; opção "Ordem dos apps: Mais usados" | `web/home.js` |
 | Perfis nas Configurações da Home: ordem dos apps, tema, cor de destaque, modo infantil | `web/home.js`, `web/accents.css` |
 | Jogo do Flamengo ao lado das abas (API pública da ESPN pelo serviço) e aviso de gol por cima de outros apps | `webos/service/service.js`, `web/home.js` |
 | Gaveta: apagar tela, mudo e timer que desliga a TV (API de controle remoto; a TV pede Permitir uma vez) | `webos/service/service.js`, `web/tv.js`, `web/home.js` |
+| Guia "Onde fica cada coisa" uma vez por perfil (e em Ajuda) e dica acima da fileira de apps | `web/home.js` |
+| Volta sempre ao Free My TV quando a home da LG aparece; painel Controles (só o som, timer, internet) | `webos/service/service.js`, `web/home.js` |
 | Destaque do Explorar girando (ligado) e constelação animada (desligada), nas Configurações da Home | `web/home.js` |
 | Developer Mode renovado pela própria TV, uma vez por dia em segundo plano; dias restantes no painel | `webos/service/service.js`, `web/home.js` |
 | Linha discreta no topo: manchetes do ge e do g1 (RSS) e dólar/euro (AwesomeAPI) | `webos/service/service.js`, `web/home.js` |
@@ -57,7 +59,6 @@ O token nunca entra no repositório.
 
 ## A testar na TV
 
-- Abrir no título em Prime, Disney+, Max, Apple TV e Globoplay (formato do link inferido).
 - Timer, apagar tela, mudo e aviso de gol (permissões novas da API de controle remoto).
 - Renovação do Developer Mode pela TV (o serviço precisa ler `/var/luna/preferences/devmode_enabled`); se der
   certo, a tarefa do notebook vira só reserva.
