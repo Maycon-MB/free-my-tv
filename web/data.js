@@ -698,6 +698,34 @@ var Data = (function () {
 
   var trailers = {}, titleLinks = {};
 
+  // MARK: - Episodes: a series' news for its card, the rule in one place
+  // "new": an episode came out in the last 7 days; "soon": one comes in the next 7 days; else nothing.
+
+  var EPISODE_WINDOW = 7 * 86400000, EPISODE_CACHE = 6 * 3600000, episodeNews = {};
+
+  function dayOf(date) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date || '');
+    return m ? new Date(+m[1], +m[2] - 1, +m[3]).getTime() : NaN;   // local midnight: "today" is the TV's day
+  }
+
+  /** done(null or {state: 'new' | 'soon', at, season, episode}) for a series, cached for 6 hours. */
+  function episodes(p, done) {
+    var hit = episodeNews[p.id];
+    if (p.kind !== 'tv') { done(null); return; }
+    if (hit && Date.now() - hit.at < EPISODE_CACHE) { done(hit.news); return; }
+    tmdb('/tv/' + Number(p.id) + '?language=' + lang(), function (err, o) {
+      var now = Date.now(), news = null, last = o && o.last_episode_to_air, next = o && o.next_episode_to_air;
+      if (!err && next && dayOf(next.air_date) - now < EPISODE_WINDOW && dayOf(next.air_date) >= now - 86400000) {
+        news = {state: dayOf(next.air_date) <= now ? 'new' : 'soon', at: dayOf(next.air_date), season: next.season_number,
+          episode: next.episode_number};
+      } else if (!err && last && now - dayOf(last.air_date) < EPISODE_WINDOW) {
+        news = {state: 'new', at: dayOf(last.air_date), season: last.season_number, episode: last.episode_number};
+      }
+      episodeNews[p.id] = {at: now, news: news};
+      done(news);
+    });
+  }
+
   /**
    * Services whose webOS app opens a title from launch params: Wikidata id properties and the params. Netflix's form
    * is the community's; Disney+'s is what LG's own search sends it (browse id, P13902), tested on webOS 25. Others
@@ -900,6 +928,7 @@ var Data = (function () {
     search: search,
     titleLink: titleLink,
     trailer: trailer,
+    episodes: episodes,
     services: services,
     refresh: function () { refreshWeather(); refreshPrices(); refreshRecs(); },
     settingsChanged: function () { pricesAt = 0; refreshPrices(); changed(); },

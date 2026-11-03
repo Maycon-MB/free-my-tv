@@ -489,3 +489,21 @@ body:not(.night) #morehint { color: #6E6E73; }
 
 /* Named top buttons sit side by side: the focused one fills with the accent but doesn't grow over its neighbor. */
 #buttons .round.pill.focus { -webkit-transform: none; transform: none; z-index: 2; }
+
+/* A series' news this week, on its card in My list and on its page. */
+.card .epbadge {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  height: 40px;
+  padding: 0 16px;
+  border-radius: 20px;
+  background: rgba(11, 11, 13, 0.85);
+  font-size: 21px;
+  font-weight: 700;
+  line-height: 40px;
+  color: #F2F2F3;
+  white-space: nowrap;
+}
+.card .epbadge.fresh { background: #E5484D; color: #FFF; }
+#detail .depisode { margin-top: 14px; font-size: 26px; font-weight: 700; color: #FF7A7F; }

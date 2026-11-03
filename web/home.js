@@ -486,6 +486,7 @@
       poster.style.backgroundImage = 'url("' + (p.poster ? Data.image(p.poster, 'w342') : Data.image(p.backdrop, 'w780')) + '")';
       el('div', 'layer back', img);
       if (p.service) serviceBadge(p, img);
+      if (p.kind === 'tv' && TAB_KIND[st.tab] === 'mine') episodeBadge(p, img);
       el('div', 'name', card, p.title);
       if (p.meta) el('div', 'meta', card, p.meta);
       hover(card, Z.CARDS, c);
@@ -895,6 +896,11 @@
     var where = app ? 'No ' + app.title : p.service ? 'Na ' + p.service + ' (app não instalado)' : p.paid ? p.paid : 'Sem streaming no Brasil';
     var about = (p.meta || (p.genres || []).slice(0, 2).join(' · ')).replace(' · ' + p.service, '');   // the service is in 'where'
     el('div', 'dmeta', info, [p.year, about, where].filter(function (x) { return x; }).join('  ·  '));
+    if (p.kind === 'tv') {
+      Data.episodes(p, function (n) {
+        if (n && dtTitle === p) el('div', 'depisode', info, n.state === 'new' ? episodeText(n) : 'Próximo episódio: ' + episodeText(n));
+      });
+    }
     var row = el('div', 'dbtns', info), buttons = detailButtons();
     for (var i = 0; i < buttons.length; i++) hover(el('div', 'dbtn' + (i === 0 && app ? ' primary' : ''), row, buttons[i].label), Z.DETAIL, i);
     st.zone = Z.DETAIL;
@@ -2357,6 +2363,21 @@
     return list.map(function (a, i) { return [a, i]; }).sort(function (x, y) {
       return ((usage[y[0].id] || 0) - (usage[x[0].id] || 0)) || x[1] - y[1];
     }).map(function (x) { return x[0]; });
+  }
+
+  var DAYS = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+
+  /** "Novo episódio" or "T2E5 · sexta": what a series in My list has this week. */
+  function episodeText(n) {
+    var ep = 'T' + n.season + 'E' + n.episode;
+    return n.state === 'new' ? 'Novo episódio · ' + ep : ep + ' · ' + DAYS[new Date(n.at).getDay()];
+  }
+
+  function episodeBadge(p, holder) {
+    Data.episodes(p, function (n) {
+      if (!n || !holder.parentNode) return;
+      el('div', 'epbadge' + (n.state === 'new' ? ' fresh' : ''), holder, episodeText(n));
+    });
   }
 
   /** Saved titles first, then the ones opened lately, without repeats: the My list tab. */
