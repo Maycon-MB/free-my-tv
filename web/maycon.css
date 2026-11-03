@@ -320,7 +320,7 @@ body.night, .night #sky .night { background: #0B0B0D; }
 #searchpage .smeta .paid { position: absolute; right: 0; top: 0; color: #FFB86B; }
 
 /* Football: the followed team's match beside the tabs; live gets the red accent. */
-#football { position: absolute; left: 640px; top: 158px; height: 68px; white-space: nowrap; }
+#football { position: absolute; left: 730px; top: 158px; height: 68px; white-space: nowrap; }
 #football .match {
   display: inline-block;
   height: 64px;
@@ -477,3 +477,6 @@ body:not(.night) #news .rates { background: #F5F5F7; }
 }
 #detail .dbtn.focus { background: #E5484D; border-color: #E5484D; }
 body:not(.night) #morehint { color: #6E6E73; }
+
+/* A profile without the extras: no headlines or sports at the top. */
+.no-extras #news, .no-extras #football { display: none; }

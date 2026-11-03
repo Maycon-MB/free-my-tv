@@ -369,8 +369,8 @@
       setClass(list[i], 'focus', st.zone === Z.TOP && st.top === i);
     }
     list = $('buttons').children;
-    for (i = 0; i < list.length; i++) setClass(list[i], 'focus', st.zone === Z.TOP && st.top === 3 + i);
-    setClass($('quotes'), 'hide', st.zone === Z.TOP && st.top >= 3);
+    for (i = 0; i < list.length; i++) setClass(list[i], 'focus', st.zone === Z.TOP && st.top === NTABS + i);
+    setClass($('quotes'), 'hide', st.zone === Z.TOP && st.top >= NTABS);
     layoutCards();
     list = $('cards').children;
     for (i = 0; i < list.length; i++) setClass(list[i], 'focus', st.zone === Z.CARDS && st.card === i);
@@ -425,14 +425,15 @@
 
   // MARK: - Top: title, tabs, buttons, quotes
 
-  var TAB_KIND = [null, 'movie', 'tv'];
+  // Explore, Movies, Shows, then My list (saved and recently opened, kept per profile).
+  var TAB_KIND = [null, 'movie', 'tv', 'mine'], NTABS = TAB_KIND.length;
 
   function renderTop() {
     $('title').textContent = tr('For You');
     var tabs = $('tabs');
     tabs.innerHTML = '';
-    var names = [tr('Explore'), tr('Movies'), tr('Shows')];
-    for (var i = 0; i < 3; i++) {
+    var names = [tr('Explore'), tr('Movies'), tr('Shows'), 'Minha lista'];
+    for (var i = 0; i < names.length; i++) {
       var t = el('button', 'tab', tabs, names[i]);
       hover(t, Z.TOP, i);
     }
@@ -450,7 +451,7 @@
       x += defs[b][2] + 16;
       sym(defs[b][0], r);
       el('span', 'plabel', r, defs[b][1]);
-      hover(r, Z.TOP, 3 + b);
+      hover(r, Z.TOP, NTABS + b);
     }
   }
 
@@ -467,11 +468,11 @@
   // MARK: - Picks and background
 
   function renderCards() {
-    var list = Data.picks(TAB_KIND[st.tab]);
+    var list = TAB_KIND[st.tab] === 'mine' ? myList() : Data.picks(TAB_KIND[st.tab]);
     var holder = $('cards');
     setClass(body, 'no-picks', !list.length);
     setClass(body, 'no-key', !Data.hasKey());   // as on Android: no title or tabs that could never show anything
-    if (!Data.hasKey() && st.zone === Z.TOP && st.top < 3) st.top = 3;
+    if (!Data.hasKey() && st.zone === Z.TOP && st.top < NTABS) st.top = NTABS;
     var same = list.length === cards.length;
     for (var i = 0; same && i < list.length; i++) same = list[i].id === cards[i].id && list[i].backdrop === cards[i].backdrop && list[i].meta === cards[i].meta;
     if (same && holder.children.length === list.length) return;
@@ -725,7 +726,7 @@
 
   // MARK: - Profiles: each keeps its own shelf order, theme, accent color and kids mode
 
-  var PROFILE_KEYS = ['shelf', 'theme', 'accent', 'kids', 'helped'];
+  var PROFILE_KEYS = ['shelf', 'theme', 'accent', 'kids', 'helped', 'mylist', 'recent', 'extras', 'showPerf'];
   var PROFILE_NAMES = ['Maycon', 'Família', 'Crianças', 'Visitas', 'Convidado'];
   var ACCENTS = [['red', 'Vermelho'], ['blue', 'Azul'], ['green', 'Verde'], ['purple', 'Roxo'], ['orange', 'Laranja'],
     ['yellow', 'Amarelo']];
@@ -755,6 +756,10 @@
 
   function profileChanged() {
     deleteArmed = false;
+    applyExtras();
+    renderPanels();
+    cards = [];
+    renderCards();
     applyAccent();
     checkNight();
     pickShelf();
@@ -762,6 +767,11 @@
     Data.settingsChanged();
     Data.refresh();
     toast('Perfil: ' + profiles()[current()].name);
+  }
+
+  /** Headlines and sports at the top, per profile: off leaves the title, tabs and buttons only. */
+  function applyExtras() {
+    setClass(body, 'no-extras', !Prefs.get('extras', true));
   }
 
   function applyAccent() {
@@ -857,6 +867,11 @@
     var p = dtTitle, app = p && p.app && Data.appFor(p.app), out = [];
     if (app) out.push({label: '▶  Assistir no ' + app.title, run: function () { closeDetail(); openTitle(p, app, null); }});
     out.push({label: 'Trailer', run: function () { closeDetail(); playTrailerOf(p); }});
+    out.push({label: inMyList(p) ? '✓ Na minha lista' : '+ Minha lista', run: function () {
+      toggleMyList(p);
+      var b = document.querySelectorAll('#detail .dbtn')[dtButton];
+      if (b) b.textContent = inMyList(p) ? '✓ Na minha lista' : '+ Minha lista';
+    }});
     out.push({label: 'Voltar', run: closeDetail});
     return out;
   }
@@ -963,7 +978,7 @@
   function closeControls() {
     setClass($('controls'), 'open', false);
     st.zone = Z.TOP;
-    st.top = 4;
+    st.top = NTABS + 1;
     updateFocus();
   }
 
@@ -1395,7 +1410,7 @@
     srShown = [];
     srAll = [];
     st.zone = Z.TOP;
-    st.top = 3;
+    st.top = NTABS;
     updateFocus();
   }
 
@@ -1519,7 +1534,7 @@
       w.style.width = (split - 16 - 80) + 'px';   // the right side: crypto prices or the TV's performance
       renderWeather(w);
     }
-    if (!qt && TV.stats) {
+    if (!qt && TV.stats && Prefs.get('showPerf', true)) {
       var pf = el('div', 'panel glass', d), at = wx ? split + 16 : 80;
       pf.id = 'perf';
       pf.style.left = at + 'px';
@@ -1660,6 +1675,10 @@
       {label: 'Times', value: followed().map(function (t) { return t.name; }).join(', ') || 'nenhum', opens: true,
         step: function (d) { if (d >= 0) openTeams(); }},
       {label: 'Ajuda: onde fica cada coisa', value: '›', opens: true, step: function (d) { if (d >= 0) openHelp(); }},
+      {label: 'Notícias e esportes no topo', toggle: Prefs.get('extras', true),
+        step: function () { Prefs.set('extras', !Prefs.get('extras', true)); applyExtras(); }},
+      {label: 'Painel de desempenho', toggle: Prefs.get('showPerf', true),
+        step: function () { Prefs.set('showPerf', !Prefs.get('showPerf', true)); renderPanels(); }},
       {label: 'Voltar ao Free My TV', toggle: Prefs.get('backHome', true),
         step: function () { Prefs.set('backHome', !Prefs.get('backHome', true)); TV.service('backHome', {on: Prefs.get('backHome', true)}); }},
       {label: 'Ordem dos apps', value: Prefs.get('shelfOrder', 'manual') === 'usage' ? 'Mais usados' : 'Manual',
@@ -2307,8 +2326,37 @@
     }).map(function (x) { return x[0]; });
   }
 
+  /** Saved titles first, then the ones opened lately, without repeats: the My list tab. */
+  function myList() {
+    var out = [], seen = {}, all = Prefs.get('mylist', []).concat(Prefs.get('recent', []));
+    for (var i = 0; i < all.length; i++) {
+      var k = all[i].kind + ':' + all[i].id;
+      if (seen[k] || !all[i].backdrop) continue;
+      seen[k] = true;
+      out.push(all[i]);
+    }
+    return out;
+  }
+
+  function inMyList(p) {
+    var list = Prefs.get('mylist', []);
+    for (var i = 0; i < list.length; i++) if (list[i].id === p.id && list[i].kind === p.kind) return true;
+    return false;
+  }
+
+  function toggleMyList(p) {
+    var keep = Prefs.get('mylist', []).filter(function (x) { return !(x.id === p.id && x.kind === p.kind); });
+    var adding = !inMyList(p);
+    if (adding) keep.unshift({id: p.id, kind: p.kind, title: p.title, poster: p.poster, backdrop: p.backdrop, app: p.app,
+      service: p.service, meta: p.meta, year: p.year || '', genres: p.genres || []});
+    Prefs.set('mylist', keep.slice(0, 30));
+    toast(adding ? p.title + ' entrou na Minha lista.' : p.title + ' saiu da Minha lista.');
+    if (TAB_KIND[st.tab] === 'mine') { cards = []; renderCards(); }
+  }
+
   function rememberTitle(p) {
-    var item = {id: p.id, kind: p.kind, title: p.title, poster: p.poster, app: p.app, year: p.year || '', genres: p.genres || []};
+    var item = {id: p.id, kind: p.kind, title: p.title, poster: p.poster, backdrop: p.backdrop, app: p.app, service: p.service,
+      meta: p.meta, year: p.year || '', genres: p.genres || []};
     var list = Prefs.get('recent', []).filter(function (r) { return !(r.id === p.id && r.kind === p.kind); });
     list.unshift(item);
     Prefs.set('recent', list.slice(0, RECENT_MAX));
@@ -2328,9 +2376,9 @@
   function activate() {
     switch (st.zone) {
       case Z.TOP:
-        if (st.top < 3) return;
-        if (st.top === 3) openSearch();
-        else if (st.top === 4) openControls();
+        if (st.top < NTABS) return;
+        if (st.top === NTABS) openSearch();
+        else if (st.top === NTABS + 1) openControls();
         else openSettings();
         return;
       case Z.CARDS:
@@ -2403,7 +2451,7 @@
         else if (dy > 0) { openDrawer(); return; }   // the next row: its header shows at the bottom of the screen
         else if (dy < 0) {
           if (cards.length) { st.zone = Z.CARDS; st.card = nearest(cardNodes, centerX(tiles[st.shelf])); }
-          else { st.zone = Z.TOP; st.top = Data.hasKey() ? st.tab : 3; }
+          else { st.zone = Z.TOP; st.top = Data.hasKey() ? st.tab : NTABS; }
         }
         break;
       case Z.CARDS:
@@ -2413,10 +2461,10 @@
         break;
       case Z.TOP:
         if (dx) {
-          st.top = Math.max(Data.hasKey() ? 0 : 3, Math.min(5, st.top + dx));   // without the picks the tabs can't hold focus
-          if (st.top < 3) selectTab(st.top);   // as on Apple TV: focusing a tab selects it
+          st.top = Math.max(Data.hasKey() ? 0 : NTABS, Math.min(NTABS + 2, st.top + dx));   // without the picks the tabs can't hold focus
+          if (st.top < NTABS) selectTab(st.top);   // as on Apple TV: focusing a tab selects it
         } else if (dy > 0) {
-          if (cards.length) { st.zone = Z.CARDS; st.card = Math.min(cards.length - 1, st.top < 3 ? 0 : cards.length - 1); }
+          if (cards.length) { st.zone = Z.CARDS; st.card = Math.min(cards.length - 1, st.top < NTABS ? 0 : cards.length - 1); }
           else st.zone = Z.SHELF;
         }
         break;
@@ -2496,10 +2544,10 @@
       if (moving || saverOn || (sheetOpen() !== (zone === Z.APPS || zone === Z.SETTINGS || zone === Z.EDIT || zone === Z.LANG || zone === Z.CITY || zone === Z.KEY || zone === Z.ABOUT || zone === Z.SEARCH || zone === Z.TEAMS || zone === Z.CTRL || zone === Z.DETAIL))) return;
       if (zone === Z.DRAWER && st.zone !== Z.DRAWER) return;
       if (zone !== Z.DRAWER && st.zone === Z.DRAWER && zone !== Z.SHELF) return;
-      if (zone === Z.TOP && index < 3 && !Data.hasKey()) return;   // the tabs are hidden without the picks
+      if (zone === Z.TOP && index < NTABS && !Data.hasKey()) return;   // the tabs are hidden without the picks
       if (zone === Z.SHELF && st.zone === Z.DRAWER) closeDrawer();
       st.zone = zone;
-      if (zone === Z.TOP) { st.top = index; if (index < 3) selectTab(index); }
+      if (zone === Z.TOP) { st.top = index; if (index < NTABS) selectTab(index); }
       else if (zone === Z.CARDS) st.card = index;
       else if (zone === Z.SHELF) st.shelf = index;
       else if (zone === Z.DRAWER) st.drawer = index;
@@ -2801,6 +2849,7 @@
   applyDim();
   tickClock();
   applyAccent();
+  applyExtras();
   restoreBackup();
   Prefs.onSave(backupSoon);
   // LG's home never stays: the service brings Free My TV back (Home Settings can turn it off).
