@@ -25,7 +25,8 @@ Tudo à vista, sem gesto escondido (o padrão de Netflix e YouTube):
 | Navegação | Página do título com Assistir, Trailer e + Minha lista; aba Minha lista (salvos e recentes) | `web/home.js` |
 | Navegação | Séries da Minha lista com selo de novo episódio (últimos 7 dias) ou do próximo (dia da semana) | `web/data.js`, `web/home.js` |
 | Navegação | Volta sempre ao Free My TV quando a home da LG aparece (serviço assina o app em primeiro plano) | `webos/service/service.js` |
-| Apps | Todos os apps na fileira; segurar OK move; ordem manual ou mais usados; Claro tv+ reconhecido | `web/home.js`, `web/data.js` |
+| Apps | Todos os apps na fileira; segurar OK move; ordem manual ou mais usados; Claro tv+, Pluto TV e Mercado Play reconhecidos | `web/home.js`, `web/data.js` |
+| Apps | Título em vários apps: um Assistir por app (os mais usados primeiro), ícones nos resultados; conta assinatura, grátis e com anúncios | `web/data.js`, `web/home.js` |
 | Apps | Abre no título: Netflix (Wikidata P1874) e Disney+ (P13902, formato da busca da LG); os demais na tela inicial | `web/data.js` |
 | Pesquisa | TMDB com filtros; tolera erro de digitação; nome de ator traz os trabalhos dele; seus apps primeiro | `web/data.js` |
 | Pesquisa | Resultados ao digitar; QR code para digitar pelo celular (porta 8770, código de 4 dígitos) | `web/home.js`, `webos/service/service.js` |
