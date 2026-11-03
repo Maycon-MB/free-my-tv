@@ -412,7 +412,9 @@ body:not(.night) #news .rates { background: #F5F5F7; }
   background: #141417;
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
-#news { width: 740px; }
+#news { width: 470px; }
+#news .title { max-width: 300px; }
+#news .rates { display: none; }   /* no room beside the named buttons; fewer things at the top */
 
 /* Help sheet: label left, where it is right, in the same box as the other sheets. */
 #help .box {
@@ -428,15 +430,50 @@ body:not(.night) #news .rates { background: #F5F5F7; }
 }
 #help .row .value { font-size: 24px; color: #B4B4BC; }
 
-/* Above the shelf, while it has the focus: what ▼ and holding OK do. */
-#shelfhint {
+
+/* Top: named buttons (icon + word) instead of icon-only circles. */
+#buttons .round.pill { border-radius: 38px; text-align: left; }
+#buttons .round.pill .sym { left: 24px; top: 20px; }
+#buttons .round.pill .plabel { position: absolute; left: 72px; top: 0; line-height: 76px; font-size: 26px; font-weight: 600; white-space: nowrap; }
+
+/* The next row's header at the bottom: what ▼ leads to is seen before pressing it. */
+#morehint {
   position: absolute;
-  right: 110px;
-  top: 776px;
-  font-size: 23px;
-  font-weight: 500;
-  color: #8C8C96;
-  white-space: nowrap;
-  -webkit-transition: opacity 0.2s;
-  transition: opacity 0.2s;
+  left: 0;
+  right: 0;
+  top: 1038px;
+  text-align: center;
+  font-family: 'Mono', monospace;
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #B4B4BC;
 }
+.drawer-open #morehint { opacity: 0; }
+
+/* A title's page: its photo, name, where it streams and named actions. */
+#detail { background: #0B0B0D; }
+#detail .art { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; background-size: cover; background-position: center top; }
+#detail .shade { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px;
+  background: -webkit-linear-gradient(left, rgba(11, 11, 13, 0.95), rgba(11, 11, 13, 0.55) 55%, rgba(11, 11, 13, 0.1));
+  background: linear-gradient(90deg, rgba(11, 11, 13, 0.95), rgba(11, 11, 13, 0.55) 55%, rgba(11, 11, 13, 0.1)); }
+#detail .info { position: absolute; left: 110px; bottom: 140px; width: 1100px; }
+#detail .dtitle { font-size: 72px; font-weight: 800; letter-spacing: -0.025em; line-height: 1.05; color: #FFF; }
+#detail .dmeta { margin-top: 20px; font-size: 28px; color: #D4D4DA; }
+#detail .dbtns { margin-top: 44px; white-space: nowrap; }
+#detail .dbtn {
+  display: inline-block;
+  height: 76px;
+  margin-right: 18px;
+  padding: 0 40px;
+  border-radius: 38px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  background: rgba(20, 20, 23, 0.7);
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 72px;
+  color: #FFF;
+}
+#detail .dbtn.focus { background: #E5484D; border-color: #E5484D; }
+body:not(.night) #morehint { color: #6E6E73; }

@@ -355,11 +355,11 @@
 
   // MARK: - Focus
 
-  var Z = {TOP: 'top', CARDS: 'cards', SHELF: 'shelf', DRAWER: 'drawer', APPS: 'apps', SETTINGS: 'settings', EDIT: 'edit', LANG: 'lang', CITY: 'city', KEY: 'key', ABOUT: 'about', SEARCH: 'search', TEAMS: 'teams', CTRL: 'ctrl', HELP: 'help'};
+  var Z = {TOP: 'top', CARDS: 'cards', SHELF: 'shelf', DRAWER: 'drawer', APPS: 'apps', SETTINGS: 'settings', EDIT: 'edit', LANG: 'lang', CITY: 'city', KEY: 'key', ABOUT: 'about', SEARCH: 'search', TEAMS: 'teams', CTRL: 'ctrl', HELP: 'help', DETAIL: 'detail'};
   var st = {zone: Z.SHELF, top: 0, tab: 0, card: 0, shelf: 0, drawer: 0, grid: 0, row: 0, edit: 0, lang: 0, city: 0, key: 0};
   var cards = [];
 
-  function sheetOpen() { return st.zone === Z.APPS || st.zone === Z.SETTINGS || st.zone === Z.EDIT || st.zone === Z.LANG || st.zone === Z.CITY || st.zone === Z.KEY || st.zone === Z.ABOUT || st.zone === Z.SEARCH || st.zone === Z.TEAMS || st.zone === Z.CTRL || st.zone === Z.HELP; }
+  function sheetOpen() { return st.zone === Z.APPS || st.zone === Z.SETTINGS || st.zone === Z.EDIT || st.zone === Z.LANG || st.zone === Z.CITY || st.zone === Z.KEY || st.zone === Z.ABOUT || st.zone === Z.SEARCH || st.zone === Z.TEAMS || st.zone === Z.CTRL || st.zone === Z.HELP || st.zone === Z.DETAIL; }
 
   function updateFocus() {
     var i, list;
@@ -393,6 +393,8 @@
     focusSearch();
     focusRows($('teampick'), tmRow, st.zone === Z.TEAMS);
     focusRows($('controls'), ctrlRow, st.zone === Z.CTRL);
+    var dbs = document.querySelectorAll('#detail .dbtn');
+    for (i = 0; i < dbs.length; i++) setClass(dbs[i], 'focus', st.zone === Z.DETAIL && dtButton === i);
     setClass(body, 'drawer-open', st.zone === Z.DRAWER);
     followSoon();
   }
@@ -437,14 +439,17 @@
     var buttons = $('buttons');
     buttons.innerHTML = '';
     // Material Symbols Rounded (Apache 2.0) as vectors: sharp at any scale, one stroke weight for the four.
-    var defs = [['icons/sym-search.svg', 'Pesquisar'], ['icons/sym-tune.svg', 'Controles'],
-      ['icons/sym-live_tv.svg', tr('light|Live TV')], ['icons/sym-settings_input_hdmi.svg', 'Entradas e ajustes'],
-      ['icons/sym-settings.svg', tr('light|Settings')]];
-    for (var b = 0; b < defs.length; b++) {
-      var r = el('button', 'round' + (b === defs.length - 1 ? ' last' : ''), buttons);
-      r.style.left = (1420 + 88 * b) + 'px';
+    // Named buttons, as YouTube's and Netflix's: what each does is read, not guessed from an icon.
+    var defs = [['icons/sym-search.svg', 'Pesquisar', 250], ['icons/sym-tune.svg', 'Controles', 240],
+      ['icons/sym-settings.svg', 'Ajustes', 200]];
+    for (var b = 0, x = 1840; b < defs.length; b++) x -= defs[b][2] + (b ? 16 : 0);
+    for (b = 0; b < defs.length; b++) {
+      var r = el('button', 'round pill', buttons);
+      r.style.left = x + 'px';
+      r.style.width = defs[b][2] + 'px';
+      x += defs[b][2] + 16;
       sym(defs[b][0], r);
-      el('div', 'tip', r, defs[b][1]);
+      el('span', 'plabel', r, defs[b][1]);
       hover(r, Z.TOP, 3 + b);
     }
   }
@@ -629,8 +634,7 @@
 
   /** The focused app's name under its tile: logos alone don't say which Globoplay or LG app it is. */
   function showTileName() {
-    var label = $('tilename'), app = st.zone === Z.SHELF ? shelf[st.shelf] : null, hint = $('shelfhint');
-    if (hint) hint.style.opacity = app && !moving ? '1' : '0';
+    var label = $('tilename'), app = st.zone === Z.SHELF ? shelf[st.shelf] : null;
     if (!label) return;
     label.style.opacity = app ? '1' : '0';
     if (!app) return;
@@ -751,7 +755,6 @@
 
   function profileChanged() {
     deleteArmed = false;
-    if (!Prefs.get('helped', false)) setTimeout(openHelp, 800);
     applyAccent();
     checkNight();
     pickShelf();
@@ -846,16 +849,56 @@
     });
   }
 
+  // MARK: - A title's page (OK on a pick or a search result): what it is and its actions, named, as on Netflix
+
+  var dtTitle = null, dtFrom = null, dtButton = 0;
+
+  function detailButtons() {
+    var p = dtTitle, app = p && p.app && Data.appFor(p.app), out = [];
+    if (app) out.push({label: '▶  Assistir no ' + app.title, run: function () { closeDetail(); openTitle(p, app, null); }});
+    out.push({label: 'Trailer', run: function () { closeDetail(); playTrailerOf(p); }});
+    out.push({label: 'Voltar', run: closeDetail});
+    return out;
+  }
+
+  function openDetail(p) {
+    var page = $('detail'), app = p.app && Data.appFor(p.app);
+    dtTitle = p;
+    dtFrom = st.zone;
+    dtButton = 0;
+    page.innerHTML = '';
+    var art = el('div', 'art', page);
+    if (p.backdrop) art.style.backgroundImage = 'url("' + Data.image(p.backdrop, 'w1280') + '")';
+    el('div', 'shade', page);
+    var info = el('div', 'info', page);
+    el('div', 'dtitle', info, p.title);
+    var where = app ? 'No ' + app.title : p.service ? 'Na ' + p.service + ' (app não instalado)' : p.paid ? p.paid : 'Sem streaming no Brasil';
+    var about = (p.meta || (p.genres || []).slice(0, 2).join(' · ')).replace(' · ' + p.service, '');   // the service is in 'where'
+    el('div', 'dmeta', info, [p.year, about, where].filter(function (x) { return x; }).join('  ·  '));
+    var row = el('div', 'dbtns', info), buttons = detailButtons();
+    for (var i = 0; i < buttons.length; i++) hover(el('div', 'dbtn' + (i === 0 && app ? ' primary' : ''), row, buttons[i].label), Z.DETAIL, i);
+    st.zone = Z.DETAIL;
+    setClass(page, 'open', true);
+    updateFocus();
+  }
+
+  function closeDetail() {
+    setClass($('detail'), 'open', false);
+    $('detail').innerHTML = '';   // its 1280 px photo leaves memory with it
+    st.zone = dtFrom || Z.CARDS;
+    updateFocus();
+  }
+
   // MARK: - Help: where everything is, shown once per profile and again from Home Settings
 
   var HELP_ROWS = [
     ['Apps', 'na fileira de baixo; ← → percorre, OK abre'],
     ['Mover um app', 'segure OK nele e use ← →; OK solta'],
-    ['Entradas (HDMI, TV)', '4º botão do topo: Entradas e ajustes'],
-    ['Ajustes da TV', 'no mesmo 4º botão do topo'],
+    ['Entradas (HDMI, TV)', 'desça (▼) abaixo dos apps'],
+    ['Ajustes da TV', 'desça (▼) abaixo dos apps'],
     ['Pesquisar', 'lupa no topo (ou pelo celular, pelo QR code)'],
-    ['Trailer', 'segure OK num filme ou série'],
-    ['Controles', '2º botão do topo: só o som, timer, internet'],
+    ['Trailer', 'OK num filme ou série: botão Trailer'],
+    ['Controles', 'botão Controles no topo: só o som, timer, internet'],
     ['Voltar', 'o botão Voltar nunca sai daqui']
   ];
 
@@ -1389,14 +1432,7 @@
       renderSearch();
       return;
     }
-    var p = srShown[srItem], app = p && p.app && Data.appFor(p.app);
-    if (!p) return;
-    if (!app) {
-      toast(p.service ? p.title + ' está na ' + p.service + ', que não está instalada nesta TV.'
-        : p.title + ' não está em streaming no Brasil.');
-      return;
-    }
-    if (!openTitle(p, app, null)) toast('Abrindo ' + app.title + ': procure “' + p.title + '” lá dentro.');
+    if (srShown[srItem]) openDetail(srShown[srItem]);
   }
 
   function moveSearch(dx, dy) {
@@ -2197,7 +2233,11 @@
 
   /** The focused title's trailer on YouTube (the TV's app may ask once whether to play it). */
   function playTrailer() {
-    var p = st.zone === Z.CARDS ? cards[st.card] : srShown[srItem], yt = youtubeApp();
+    playTrailerOf(st.zone === Z.CARDS ? cards[st.card] : srShown[srItem]);
+  }
+
+  function playTrailerOf(p) {
+    var yt = youtubeApp();
     if (!p) return;
     if (!yt) { toast('O YouTube não está instalado nesta TV.'); return; }
     toast('Procurando o trailer de “' + p.title + '”…');
@@ -2291,13 +2331,10 @@
         if (st.top < 3) return;
         if (st.top === 3) openSearch();
         else if (st.top === 4) openControls();
-        else if (st.top === 5) { var live = liveTV(); if (live) launcher(live.id, tr('Live TV'))(); }
-        else if (st.top === 6) { st.zone = Z.SHELF; openDrawer(); st.drawer = 1 < drawerInputs ? 1 : 0; updateFocus(); }
         else openSettings();
         return;
       case Z.CARDS:
-        var target = pickTarget(cards[st.card]);
-        if (target) openTitle(cards[st.card], target.app, target.params);
+        openDetail(cards[st.card]);
         return;
       case Z.SHELF:
         if (shelf[st.shelf]) launcher(shelf[st.shelf].id, shelf[st.shelf].title)();
@@ -2338,6 +2375,9 @@
       case Z.HELP:
         closeHelp();
         return;
+      case Z.DETAIL:
+        detailButtons()[dtButton].run();
+        return;
     }
   }
 
@@ -2360,7 +2400,7 @@
     switch (st.zone) {
       case Z.SHELF:
         if (dx) st.shelf = Math.max(0, Math.min(shelf.length - 1, st.shelf + dx));
-        else if (dy > 0) return;   // the drawer opens from the Inputs button at the top, not from an arrow
+        else if (dy > 0) { openDrawer(); return; }   // the next row: its header shows at the bottom of the screen
         else if (dy < 0) {
           if (cards.length) { st.zone = Z.CARDS; st.card = nearest(cardNodes, centerX(tiles[st.shelf])); }
           else { st.zone = Z.TOP; st.top = Data.hasKey() ? st.tab : 3; }
@@ -2373,7 +2413,7 @@
         break;
       case Z.TOP:
         if (dx) {
-          st.top = Math.max(Data.hasKey() ? 0 : 3, Math.min(7, st.top + dx));   // without the picks the tabs can't hold focus
+          st.top = Math.max(Data.hasKey() ? 0 : 3, Math.min(5, st.top + dx));   // without the picks the tabs can't hold focus
           if (st.top < 3) selectTab(st.top);   // as on Apple TV: focusing a tab selects it
         } else if (dy > 0) {
           if (cards.length) { st.zone = Z.CARDS; st.card = Math.min(cards.length - 1, st.top < 3 ? 0 : cards.length - 1); }
@@ -2411,6 +2451,9 @@
       case Z.SEARCH:
         moveSearch(dx, dy);
         break;
+      case Z.DETAIL:
+        if (dx) dtButton = Math.max(0, Math.min(detailButtons().length - 1, dtButton + dx));
+        break;
       case Z.CTRL:
         if (dy) ctrlRow = Math.max(0, Math.min(controlRows().length - 1, ctrlRow + dy));
         else if (dx && controlRows()[ctrlRow].step) controlRows()[ctrlRow].step(dx);
@@ -2439,6 +2482,7 @@
     if (st.zone === Z.TEAMS) { closeTeams(); return; }
     if (st.zone === Z.CTRL) { closeControls(); return; }
     if (st.zone === Z.HELP) { closeHelp(); return; }
+    if (st.zone === Z.DETAIL) { closeDetail(); return; }
     if (sheetOpen()) { closeSheets(); return; }
     if (st.zone === Z.DRAWER) { closeDrawer(); return; }
     if (st.zone !== Z.SHELF && shelf.length) { st.zone = Z.SHELF; updateFocus(); return; }
@@ -2449,7 +2493,7 @@
   /** The pointer focuses what it's over (the Magic Remote, or a mouse when previewing). */
   function hover(node, zone, index) {
     node.onmouseover = function () {
-      if (moving || saverOn || (sheetOpen() !== (zone === Z.APPS || zone === Z.SETTINGS || zone === Z.EDIT || zone === Z.LANG || zone === Z.CITY || zone === Z.KEY || zone === Z.ABOUT || zone === Z.SEARCH || zone === Z.TEAMS || zone === Z.CTRL))) return;
+      if (moving || saverOn || (sheetOpen() !== (zone === Z.APPS || zone === Z.SETTINGS || zone === Z.EDIT || zone === Z.LANG || zone === Z.CITY || zone === Z.KEY || zone === Z.ABOUT || zone === Z.SEARCH || zone === Z.TEAMS || zone === Z.CTRL || zone === Z.DETAIL))) return;
       if (zone === Z.DRAWER && st.zone !== Z.DRAWER) return;
       if (zone !== Z.DRAWER && st.zone === Z.DRAWER && zone !== Z.SHELF) return;
       if (zone === Z.TOP && index < 3 && !Data.hasKey()) return;   // the tabs are hidden without the picks
@@ -2467,6 +2511,7 @@
       else if (zone === Z.KEY) st.key = index;
       else if (zone === Z.TEAMS) tmRow = index;
       else if (zone === Z.CTRL) ctrlRow = index;
+      else if (zone === Z.DETAIL) dtButton = index;
       else if (zone === Z.SEARCH) {
         srPart = Math.floor(index / 1000);
         if (srPart === 1) srChip = index % 1000;
@@ -2758,7 +2803,6 @@
   applyAccent();
   restoreBackup();
   Prefs.onSave(backupSoon);
-  if (!Prefs.get('helped', false)) setTimeout(openHelp, 1500);
   // LG's home never stays: the service brings Free My TV back (Home Settings can turn it off).
   TV.service('backHome', {on: Prefs.get('backHome', true)});
   pollF1();
