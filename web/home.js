@@ -791,6 +791,11 @@
   function switchProfile(to) {
     var list = profiles().slice();
     list[current()] = snapshot();
+    loadProfile(list, to);
+  }
+
+  /** Makes slot `to` of `list` the live profile: its settings become the current ones. */
+  function loadProfile(list, to) {
     var next = list[to] || {};
     for (var i = 0; i < PROFILE_KEYS.length; i++) Prefs.set(PROFILE_KEYS[i], next[PROFILE_KEYS[i]]);
     Prefs.set('profiles', list);
@@ -864,11 +869,7 @@
           deleteArmed = false;
           var copy = profiles().slice();
           copy.splice(at, 1);
-          var to = Math.max(0, at - 1), next = copy[to];
-          for (var i = 0; i < PROFILE_KEYS.length; i++) Prefs.set(PROFILE_KEYS[i], next[PROFILE_KEYS[i]]);
-          Prefs.set('profiles', copy);
-          Prefs.set('profile', to);
-          profileChanged();
+          loadProfile(copy, Math.max(0, at - 1));
         }});
     }
     return rows;
@@ -1066,8 +1067,8 @@
       if (st.zone !== Z.PAIR) return;
       if (!res || !res.qr) { hint.textContent = 'Não deu para abrir a página do celular (a TV está na rede?).'; return; }
       drawQr(el('canvas', 'qrbig', box), res.qr);
-      hint.textContent = 'Aponte a câmera do celular. Ou abra ' + res.url.replace('http://', '') + ' e digite ' + res.code +
-        '. O celular fica pareado: da próxima vez, é só abrir o mesmo endereço.';
+      hint.textContent = 'Aponte a câmera do celular (o código vale 2 minutos). Ou abra ' + res.url.replace('http://', '') +
+        ' e digite ' + res.code + '. Depois, é só abrir o mesmo endereço.';
     });
   }
 
@@ -1389,7 +1390,7 @@
     srShown = srAll.filter(function (p) {
       if (srKind === 1 && p.kind !== 'movie') return false;
       if (srKind === 2 && p.kind !== 'tv') return false;
-      if (srMine && !(p.app && Data.appFor(p.app))) return false;
+      if (srMine && !(p.app && Data.usable(p.app))) return false;
       return !genre || p.genres.indexOf(genre) >= 0;
     });
     srItem = Math.min(srItem, Math.max(0, srShown.length - 1));
@@ -1433,7 +1434,7 @@
     grid.innerHTML = '';
     if (status) status.textContent = srStatus;
     for (var i = 0; i < srShown.length; i++) {
-      var p = srShown[i], item = el('div', 'sitem', grid), app = p.app && Data.appFor(p.app);
+      var p = srShown[i], item = el('div', 'sitem', grid), app = p.app && Data.usable(p.app) && Data.appFor(p.app);
       item.style.left = (90 + (i % SEARCH_COLS) * 296) + 'px';
       item.style.top = (Math.floor(i / SEARCH_COLS) * SEARCH_ROW) + 'px';
       var poster = el('div', 'poster', item);
@@ -1506,7 +1507,7 @@
   function startPhone() {
     TV.service('phone', {action: 'start'}, function (res) {
       if (!res || !res.url || st.zone !== Z.SEARCH) return;
-      phoneHint = 'Aponte a câmera do celular  ·  ou abra ' + res.url.replace('http://', '') + ', código ' + res.code;
+      phoneHint = 'Aponte a câmera do celular (vale 2 min)  ·  ou abra ' + res.url.replace('http://', '') + ', código ' + res.code;
       phoneQr = res.qr || null;
       renderSearch();
       clearInterval(phoneTimer);
@@ -1810,6 +1811,10 @@
           Prefs.set('phoneRemote', !Prefs.get('phoneRemote', true));
           TV.service('phone', {action: 'remote', on: Prefs.get('phoneRemote', true)});
         }},
+      {label: 'Esquecer celulares pareados', value: '›', step: function (d) {
+        if (d < 0) return;
+        TV.service('phone', {action: 'forget'}, function (res) { toast(res ? 'Nenhum celular pareado agora.' : 'Não deu para esquecer.'); });
+      }},
       {label: 'Voltar ao Free My TV', toggle: Prefs.get('backHome', true),
         step: function () { Prefs.set('backHome', !Prefs.get('backHome', true)); TV.service('backHome', {on: Prefs.get('backHome', true)}); }},
       {label: 'Ordem dos apps', value: Prefs.get('shelfOrder', 'manual') === 'usage' ? 'Mais usados' : 'Manual',
@@ -2442,7 +2447,13 @@
 
   // MARK: - Most used apps and recently opened titles
 
-  var RECENT_MAX = 12;
+  var RECENT_MAX = 12, MYLIST_MAX = 30;
+
+  /** What My list and the recent titles keep of a title: enough to draw its card and open it. */
+  function keptTitle(p) {
+    return {id: p.id, kind: p.kind, title: p.title, poster: p.poster, backdrop: p.backdrop, app: p.app, apps: p.apps,
+      service: p.service, meta: p.meta, year: p.year || '', genres: p.genres || []};
+  }
 
   function countLaunch(id) {
     var usage = Prefs.get('usage', {}), copy = {};
@@ -2495,16 +2506,14 @@
   function toggleMyList(p) {
     var keep = Prefs.get('mylist', []).filter(function (x) { return !(x.id === p.id && x.kind === p.kind); });
     var adding = !inMyList(p);
-    if (adding) keep.unshift({id: p.id, kind: p.kind, title: p.title, poster: p.poster, backdrop: p.backdrop, app: p.app,
-      service: p.service, meta: p.meta, year: p.year || '', genres: p.genres || []});
-    Prefs.set('mylist', keep.slice(0, 30));
+    if (adding) keep.unshift(keptTitle(p));
+    Prefs.set('mylist', keep.slice(0, MYLIST_MAX));
     toast(adding ? p.title + ' entrou na Minha lista.' : p.title + ' saiu da Minha lista.');
     if (TAB_KIND[st.tab] === 'mine') { cards = []; renderCards(); }
   }
 
   function rememberTitle(p) {
-    var item = {id: p.id, kind: p.kind, title: p.title, poster: p.poster, backdrop: p.backdrop, app: p.app, service: p.service,
-      meta: p.meta, year: p.year || '', genres: p.genres || []};
+    var item = keptTitle(p);
     var list = Prefs.get('recent', []).filter(function (r) { return !(r.id === p.id && r.kind === p.kind); });
     list.unshift(item);
     Prefs.set('recent', list.slice(0, RECENT_MAX));

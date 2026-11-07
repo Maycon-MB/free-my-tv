@@ -491,7 +491,17 @@ service.register('remind', function (message) {
 
 var http = require('http'), os = require('os'), crypto = require('crypto');
 var PHONES = '/media/developer/temp/freemytv-phones.json';
-var phone = {server: null, code: '', text: '', port: 8770, fails: 0, searching: false, tokens: null, pointer: null};
+var phone = {server: null, code: '', codeAt: 0, text: '', port: 8770, fails: {}, searching: false, tokens: null,
+  pointer: null, host: ''};
+var CODE_TTL = 120000, MAX_FAILS = 5;
+
+function sha256(text) { return crypto.createHash('sha256').update(String(text)).digest('hex'); }
+
+/** Only the home network may talk to the page: private IPv4 (or its IPv6-mapped form). */
+function homeNetwork(address) {
+  var a = String(address || '').replace(/^::ffff:/, '');
+  return /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|127\.)/.test(a);
+}
 
 function lanAddress() {
   var nets = os.networkInterfaces();
@@ -511,25 +521,40 @@ function tokens() {
   return phone.tokens;
 }
 
+/** A fresh pairing code: 6 random digits, good for 2 minutes and one phone; showing one clears the lock. */
 function newCode() {
-  phone.code = String(1000 + Math.floor(Math.random() * 9000));
-  phone.fails = 0;
+  phone.code = String(100000 + crypto.randomBytes(4).readUInt32BE(0) % 900000);
+  phone.codeAt = Date.now();
+  phone.fails = {};
 }
 
 function pairedBy(req) {
   var m = /(?:^|;\s*)fmtv=([0-9a-f]{32})/.exec(req.headers.cookie || '');
-  return !!m && tokens().indexOf(m[1]) >= 0;
+  return !!m && tokens().indexOf(sha256(m[1])) >= 0;   // only hashes are kept on the TV
 }
 
-/** A new token for a phone that typed the right code (5 wrong codes lock pairing until a new code is shown). */
-function pair(code, res) {
-  if (phone.fails >= 5 || !phone.code || code !== phone.code) { phone.fails++; return false; }
+/**
+ * A new token for a phone that sent the current code in time; the code is then used up. 5 wrong codes from one
+ * address lock it out until the TV shows a new code.
+ */
+function pair(code, req, res) {
+  var who = String(req.socket.remoteAddress || ''), fails = phone.fails[who] || 0;
+  var live = phone.code && Date.now() - phone.codeAt < CODE_TTL;
+  if (fails >= MAX_FAILS || !live || code !== phone.code) { phone.fails[who] = fails + 1; return false; }
+  phone.code = '';
   var token = crypto.randomBytes(16).toString('hex'), list = tokens();
-  list.push(token);
+  list.push(sha256(token));
   if (list.length > 8) list.shift();
   fs.writeFile(PHONES, JSON.stringify(list), function () {});
-  res.setHeader('Set-Cookie', 'fmtv=' + token + '; Max-Age=31536000; Path=/; HttpOnly; SameSite=Strict');
+  res.setHeader('Set-Cookie', 'fmtv=' + token + '; Max-Age=15552000; Path=/; HttpOnly; SameSite=Strict');
+  toast('Celular pareado como controle da TV.');
   return true;
+}
+
+/** Every phone forgets its pairing (Home Settings). */
+function forgetPhones() {
+  phone.tokens = [];
+  fs.writeFile(PHONES, '[]', function () {});
 }
 
 /** A WebSocket to a path on the TV's remote control server (the pointer input socket), text frames out only. */
@@ -595,7 +620,8 @@ var PAIR_PAGE = '<!doctype html><meta name=viewport content="width=device-width,
   '<style>body{font:18px system-ui;background:#0B0B0D;color:#F2F2F3;margin:24px}input,button{font:inherit;width:100%;' +
   'box-sizing:border-box;padding:14px;margin:8px 0;border-radius:12px;border:1px solid #333;background:#141417;color:inherit}' +
   'button{background:#E5484D;border:0;font-weight:700}</style><h2>Parear com a TV</h2><p>%MSG%</p><form method=post action=/pair>' +
-  '<input name=code inputmode=numeric placeholder="Código que aparece na TV" required autofocus><button>Parear</button></form>';
+  '<input name=code inputmode=numeric maxlength=6 placeholder="Código de 6 dígitos na TV" required autofocus>' +
+  '<button>Parear</button></form>';
 
 function body(req, done) {
   var text = '';
@@ -606,12 +632,25 @@ function body(req, done) {
 function startServer() {
   if (phone.server) return;
   phone.server = http.createServer(function (req, res) {
-    var path = (req.url || '/').split('?')[0];
-    function page(html) { res.writeHead(200, {'Content-Type': 'text/html; charset=utf-8'}); res.end(html); }
+    var path = (req.url || '/').split('?')[0], origin = req.headers.origin;
+    // Only this TV's address as Host (no DNS rebinding), only the home network, and posts only from this page.
+    if (!homeNetwork(req.socket.remoteAddress) || req.headers.host !== phone.host ||
+        (req.method === 'POST' && origin && origin !== 'http://' + phone.host)) {
+      res.writeHead(403);
+      res.end();
+      return;
+    }
+    function page(html) {
+      res.writeHead(200, {'Content-Type': 'text/html; charset=utf-8', 'X-Frame-Options': 'DENY',
+        'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'self' 'unsafe-inline'"});
+      res.end(html);
+    }
     if (req.method === 'POST' && path === '/pair') {
       body(req, function (f) {
-        if (pair(String(f.code || ''), res)) { res.writeHead(303, {Location: '/'}); res.end(); }
-        else page(PAIR_PAGE.replace('%MSG%', phone.fails >= 5 ? 'Muitas tentativas: abra o QR de novo na TV.' : 'Código errado.'));
+        if (pair(String(f.code || ''), req, res)) { res.writeHead(303, {Location: '/'}); res.end(); return; }
+        var locked = (phone.fails[String(req.socket.remoteAddress || '')] || 0) >= MAX_FAILS;
+        page(PAIR_PAGE.replace('%MSG%', locked ? 'Muitas tentativas: abra o QR de novo na TV.'
+          : 'Código errado ou vencido (vale 2 minutos): abra o QR de novo na TV.'));
       });
       return;
     }
@@ -626,12 +665,15 @@ function startServer() {
       return;
     }
     // The QR code's link carries the code (?c=1234): the phone pairs by opening it.
-    var given = /[?&]c=(\d{4})(&|$)/.exec(req.url || '');
-    if (!pairedBy(req) && given && pair(given[1], res)) { res.writeHead(303, {Location: '/'}); res.end(); return; }
+    var given = /[?&]c=(\d{6})(&|$)/.exec(req.url || '');
+    if (!pairedBy(req) && given && pair(given[1], req, res)) { res.writeHead(303, {Location: '/'}); res.end(); return; }
     page(pairedBy(req) ? REMOTE_PAGE : PAIR_PAGE.replace('%MSG%', 'Digite o código que aparece na TV.'));
   });
   phone.server.on('error', function () { phone.server = null; hold(); });
-  phone.server.listen(phone.port);
+  phone.server.maxConnections = 16;
+  phone.server.timeout = 10000;
+  phone.host = lanAddress() + ':' + phone.port;
+  phone.server.listen(phone.port, lanAddress() || '127.0.0.1');   // the home network's address only, never IPv6
   hold();   // webOS stops an idle service, and the page would go with it
 }
 
@@ -651,6 +693,9 @@ service.register('phone', function (message) {
     startServer();
     newCode();
     message.respond({returnValue: !!lanAddress(), url: url, code: phone.code, qr: qrEncode(url + '/?c=' + phone.code)});
+  } else if (p.action === 'forget') {
+    forgetPhones();
+    message.respond({returnValue: true});
   } else if (p.action === 'poll') {
     var text = phone.text;
     phone.text = '';
