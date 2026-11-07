@@ -82,9 +82,10 @@ Confirmado (webOS 25): renovação pela TV, volta ao Free My TV pelo Home, Netfl
 pesquisa pelo celular e QR code, manchetes, F1, futebol, permissões da API de controle remoto.
 
 Confirmado em 2026-11-06: ícone de rede com sinal real (74%), página do celular só no IP da casa (Host falso →
-403), pareamento pelo QR, memória da tela de ~75 para 55 MB.
+403), pareamento pelo QR, tecla do celular movendo o foco na TV (depois do Permitir das permissões de ponteiro),
+memória da tela de ~75 para 55 MB.
 
-A testar: tecla do celular chegando na TV (depende do Permitir das permissões de ponteiro), timer até desligar, só o som, aviso de gol com jogo ao vivo, a TV ligando no app pela "última entrada"
+A testar: timer até desligar, só o som, aviso de gol com jogo ao vivo, a TV ligando no app pela "última entrada"
 (inclusive depois de tirar da tomada) e o roteiro de abrir no título em outros apps (fim deste arquivo).
 
 ## Atualizar com o original
