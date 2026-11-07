@@ -21,9 +21,9 @@
   }
 
   function sym(name, parent, size) {
-    var s = el('span', 'sym', parent);
-    s.style.webkitMaskImage = 'url(symbols/' + name + '.png)';
-    s.style.maskImage = 'url(symbols/' + name + '.png)';
+    var s = el('span', 'sym', parent), url = name.indexOf('/') >= 0 ? name : 'symbols/' + name + '.png';
+    s.style.webkitMaskImage = 'url(' + url + ')';
+    s.style.maskImage = 'url(' + url + ')';
     if (size) { s.style.width = size + 'px'; s.style.height = size + 'px'; }
     return s;
   }
@@ -259,6 +259,66 @@
     }
   }
 
+  // Bundled vector or large logos by SHELF key: the TV's icons are 130 px squares and blur once scaled to a tile.
+  var BRAND_LOGOS = {
+    netflix: 'icons/netflix.svg', youtube: 'icons/youtube.png', prime: 'icons/prime.png', max: 'icons/max.svg',
+    appletv: 'icons/appletv.svg', paramount: 'icons/paramountplus.svg', jellyfin: 'icons/jellyfin.svg',
+    spotify: 'icons/spotify.svg'
+  };
+
+  /** Where a pick streams, at a glance: the service's logo (or its name) in the card's corner. */
+  function serviceBadge(p, holder) {
+    var app = Data.appFor(p.app), badge = el('div', 'badge', holder);
+    if (p.app === 'netflix') { badge.className += ' netflix'; el('img', '', badge).src = BRAND_LOGOS.netflix; }
+    else if (app && app.icon) el('img', '', badge).src = app.icon;   // the same icon as on the TV's own launcher
+    else { badge.className += ' word'; badge.textContent = p.service; }
+  }
+
+  /** The icons of the TV's apps a title streams on (up to 3), in a poster's corner: recognized before read. */
+  function appIcons(p, holder) {
+    var keys = p.apps || (p.app ? [p.app] : []), box = null;
+    for (var i = 0; i < keys.length && i < 3; i++) {
+      var app = Data.appFor(keys[i]);
+      if (!app) continue;
+      if (!box) box = el('div', 'appicons', holder);
+      var icon = el('div', 'appicon' + (keys[i] === 'netflix' ? ' netflix' : ''), box);
+      if (keys[i] === 'netflix') el('img', '', icon).src = BRAND_LOGOS.netflix;
+      else if (app.icon) el('img', '', icon).src = app.icon;
+      else icon.textContent = app.title.charAt(0);
+    }
+  }
+
+  /** Opens a title in its app, on the title's page when Wikidata knows its id there (else on the app's home). */
+  // Apps that hang on a link when it comes with a cold start: the service opens them plain, then sends the title.
+  var WARM_FIRST = {disney: true, prime: true};
+  // Opening a title: one at a time. A second OK while one opens says so instead of doing nothing; after
+  // OPEN_WAIT the attempt counts as over, so a lost answer never locks the button.
+  var OPEN_WAIT = 15000, opening = {at: 0, title: ''};
+
+  function openTitle(p, app, params) {
+    note('abrir ' + p.title + ' em ' + app.id + (params ? ' com link' : ''));
+    rememberTitle(p);
+    if (params || !p.app) { launcher(app.id, app.title, params)(); return null; }
+    if (Date.now() - opening.at < OPEN_WAIT) { toast('Ainda abrindo “' + opening.title + '”…'); return true; }
+    opening = {at: Date.now(), title: p.title};
+    toast('Abrindo ' + app.title + '…');
+    Data.titleLink(p, p.app, function (params) {
+      opening = {at: 0, title: ''};
+      if (!params) {
+        launcher(app.id, app.title, null)();
+        toast('Abrindo ' + app.title + ': procure “' + p.title + '” lá dentro.');
+      } else if (WARM_FIRST[p.app]) {
+        countLaunch(app.id);
+        TV.service('openWarm', {id: app.id, params: params, title: p.title}, function (res) {
+          if (!res) launcher(app.id, app.title, params)();   // no service (another TV): straight
+        });
+      } else {
+        launcher(app.id, app.title, params)();
+      }
+    });
+    return true;
+  }
+
   /** An app's face: its logo on its brand color (or its name, when the icon can't be read). */
   function face(app, box, wordSize) {
     var k = shelfKey(app);
@@ -267,8 +327,10 @@
     paint(box, top, bottom);
     var word = el('div', 'word', box, app.title);
     if (wordSize) word.style.fontSize = wordSize + 'px';
-    if (app.icon) {
-      var img = el('img', '', box), url = app.icon;
+    var brand = k && BRAND_LOGOS[k[0]];
+    if (brand && !lifted[brand]) lifted[brand] = {src: brand, bg: null, ink: null};
+    if (brand || app.icon) {
+      var img = el('img', '', box), url = brand || app.icon;
       word.style.visibility = 'hidden';
       img.onerror = function () { if (img.parentNode) img.parentNode.removeChild(img); word.style.visibility = ''; };
       if (lifted[url]) { showLogo(img, box, top, bottom, lifted[url], !k); return; }
@@ -307,24 +369,28 @@
       }
       if (!out.length) out = apps.slice(0, FEW_APPS);
     } else {
-      for (var s = 0; s < SHELF.length && out.length < FEW_APPS; s++) {
+      // Every app on the shelf, the streaming ones first: the row scrolls, and Shelf in Home Settings reorders it.
+      for (var s = 0; s < SHELF.length; s++) {
         for (var a = 0; a < apps.length; a++) {
           if ((SHELF[s][1].test(apps[a].id) || SHELF[s][2].test(apps[a].title)) && out.indexOf(apps[a]) < 0) { out.push(apps[a]); break; }
         }
       }
-      if (!out.length) out = apps.slice(0, FEW_APPS);
+      for (var r = 0; r < apps.length; r++) if (out.indexOf(apps[r]) < 0) out.push(apps[r]);
     }
-    shelf = out;
-    others = apps.filter(function (x) { return shelf.indexOf(x) < 0; });
+    shelf = Prefs.get('shelfOrder', 'manual') === 'usage' ? byUsage(out) : out;
+    // All Apps lists every app, by name: with every app on the shelf by default, "the rest" was an empty sheet
+    others = apps.slice().sort(function (x, y) { return x.title.localeCompare(y.title); });
   }
 
   // MARK: - Focus
 
-  var Z = {TOP: 'top', CARDS: 'cards', SHELF: 'shelf', DRAWER: 'drawer', APPS: 'apps', SETTINGS: 'settings', EDIT: 'edit', LANG: 'lang', CITY: 'city', KEY: 'key', ABOUT: 'about'};
+  var Z = {TOP: 'top', GENRE: 'genre', CARDS: 'cards', SHELF: 'shelf', DRAWER: 'drawer', APPS: 'apps', SETTINGS: 'settings', EDIT: 'edit', LANG: 'lang', CITY: 'city', KEY: 'key', ABOUT: 'about', SEARCH: 'search', TEAMS: 'teams', CTRL: 'ctrl', HELP: 'help', DETAIL: 'detail', PAIR: 'pair'};
   var st = {zone: Z.SHELF, top: 0, tab: 0, card: 0, shelf: 0, drawer: 0, grid: 0, row: 0, edit: 0, lang: 0, city: 0, key: 0};
   var cards = [];
+  var genreAt = 0, genreTimer = 0;   // the chip with focus; st.genre is the one applied
+  st.genre = 0;
 
-  function sheetOpen() { return st.zone === Z.APPS || st.zone === Z.SETTINGS || st.zone === Z.EDIT || st.zone === Z.LANG || st.zone === Z.CITY || st.zone === Z.KEY || st.zone === Z.ABOUT; }
+  function sheetOpen() { return st.zone === Z.APPS || st.zone === Z.SETTINGS || st.zone === Z.EDIT || st.zone === Z.LANG || st.zone === Z.CITY || st.zone === Z.KEY || st.zone === Z.ABOUT || st.zone === Z.SEARCH || st.zone === Z.TEAMS || st.zone === Z.CTRL || st.zone === Z.HELP || st.zone === Z.DETAIL || st.zone === Z.PAIR; }
 
   function updateFocus() {
     var i, list;
@@ -334,14 +400,20 @@
       setClass(list[i], 'focus', st.zone === Z.TOP && st.top === i);
     }
     list = $('buttons').children;
-    for (i = 0; i < list.length; i++) setClass(list[i], 'focus', st.zone === Z.TOP && st.top === 3 + i);
-    setClass($('quotes'), 'hide', st.zone === Z.TOP && st.top >= 3);
+    for (i = 0; i < list.length; i++) setClass(list[i], 'focus', st.zone === Z.TOP && st.top === NTABS + i);
+    setClass($('quotes'), 'hide', st.zone === Z.TOP && st.top >= NTABS);
+    list = $('genres').children;
+    for (i = 0; i < list.length; i++) {
+      setClass(list[i], 'on', i === st.genre);
+      setClass(list[i], 'focus', st.zone === Z.GENRE && genreAt === i);
+    }
     layoutCards();
     list = $('cards').children;
     for (i = 0; i < list.length; i++) setClass(list[i], 'focus', st.zone === Z.CARDS && st.card === i);
     list = $('tiles').children;
     for (i = 0; i < list.length; i++) setClass(list[i], 'focus', st.zone === Z.SHELF && st.shelf === i);
     revealShelf();
+    showTileName();
     list = document.querySelectorAll('#drawer .key');
     for (i = 0; i < list.length; i++) setClass(list[i], 'focus', st.zone === Z.DRAWER && st.drawer === i);
     list = document.querySelectorAll('#apps .cell');
@@ -354,6 +426,11 @@
     if (langHint) langHint.textContent = (st.lang + 1) + ' / ' + languageChoices().length + '  ·  ' + tr('OK picks, Back cancels.');
     focusRows($('citypick'), st.city, st.zone === Z.CITY);
     focusRows($('keypick'), st.key, st.zone === Z.KEY);
+    focusSearch();
+    focusRows($('teampick'), tmRow, st.zone === Z.TEAMS);
+    focusRows($('controls'), ctrlRow, st.zone === Z.CTRL);
+    var dbs = document.querySelectorAll('#detail .dbtn');
+    for (i = 0; i < dbs.length; i++) setClass(dbs[i], 'focus', st.zone === Z.DETAIL && dtButton === i);
     setClass(body, 'drawer-open', st.zone === Z.DRAWER);
     followSoon();
   }
@@ -363,8 +440,9 @@
     for (var i = 0; i < rows.length; i++) setClass(rows[i], 'focus', on && i === index);
     var holder = sheet.querySelector('.rows');
     if (!holder) return;
-    var visible = 7, first = Math.max(0, Math.min(rows.length - visible, index - 3));
-    holder.style.webkitTransform = holder.style.transform = 'translateY(' + (-first * 78) + 'px)';
+    var room = holder.parentNode.offsetHeight, at = rows[index] ? rows[index].offsetTop : 0;
+    var shift = Math.max(0, Math.min(holder.offsetHeight - room, at - 3 * 78));   // focused row 4th from the top
+    holder.style.webkitTransform = holder.style.transform = 'translateY(' + (-shift) + 'px)';
   }
 
   function nearest(nodes, x) {
@@ -384,27 +462,37 @@
 
   // MARK: - Top: title, tabs, buttons, quotes
 
-  var TAB_KIND = [null, 'movie', 'tv'];
+  // Explore, Movies, Shows, then My list (saved and recently opened, kept per profile).
+  var TAB_KIND = [null, 'movie', 'tv', 'mine'], NTABS = TAB_KIND.length;
+  var lastTab = 0;   // the tab ↓ from the menu returns to
 
   function renderTop() {
     $('title').textContent = tr('For You');
+    renderGenres();
     var tabs = $('tabs');
     tabs.innerHTML = '';
-    var names = [tr('Explore'), tr('Movies'), tr('Shows')];
-    for (var i = 0; i < 3; i++) {
+    var names = [tr('Explore'), tr('Movies'), tr('Shows'), 'Minha lista'];
+    for (var i = 0; i < names.length; i++) {
       var t = el('button', 'tab', tabs, names[i]);
       hover(t, Z.TOP, i);
     }
     var buttons = $('buttons');
     buttons.innerHTML = '';
-    var defs = [['live_tv', tr('light|Live TV')], ['hdmi', tr('HDMI Inputs')], ['settings', tr('light|Settings')]];
-    for (var b = 0; b < 3; b++) {
-      var r = el('button', 'round' + (b === 2 ? ' last' : ''), buttons);
-      r.style.left = (1596 + 88 * b) + 'px';
+    // Material Symbols Rounded (Apache 2.0) as vectors: sharp at any scale, one stroke weight for the four.
+    // Named buttons, as YouTube's and Netflix's: what each does is read, not guessed from an icon.
+    var defs = [['icons/sym-network_wifi.svg', '', 76], ['icons/sym-search.svg', 'Pesquisar', 250],
+      ['icons/sym-tune.svg', 'Controles', 240], ['icons/sym-settings.svg', 'Ajustes', 200]];
+    for (var b = 0, x = 1840; b < defs.length; b++) x -= defs[b][2] + (b ? 16 : 0);
+    for (b = 0; b < defs.length; b++) {
+      var r = el('button', 'round pill', buttons);
+      r.style.left = x + 'px';
+      r.style.width = defs[b][2] + 'px';
+      x += defs[b][2] + 16;
       sym(defs[b][0], r);
-      el('div', 'tip', r, defs[b][1]);
-      hover(r, Z.TOP, 3 + b);
+      el('span', 'plabel', r, defs[b][1]);
+      hover(r, Z.TOP, NTABS + b);
     }
+    showNetwork();
   }
 
   function renderQuotes() {
@@ -420,11 +508,10 @@
   // MARK: - Picks and background
 
   function renderCards() {
-    var list = Data.picks(TAB_KIND[st.tab]);
-    var holder = $('cards');
-    setClass(body, 'no-picks', !list.length);
+    var list = cardList(), holder = $('cards');
+    setClass(body, 'no-picks', !list.length && !st.genre);
     setClass(body, 'no-key', !Data.hasKey());   // as on Android: no title or tabs that could never show anything
-    if (!Data.hasKey() && st.zone === Z.TOP && st.top < 3) st.top = 3;
+    if (!Data.hasKey() && st.zone === Z.TOP && st.top < NTABS) st.top = NTABS;
     var same = list.length === cards.length;
     for (var i = 0; same && i < list.length; i++) same = list[i].id === cards[i].id && list[i].backdrop === cards[i].backdrop && list[i].meta === cards[i].meta;
     if (same && holder.children.length === list.length) return;
@@ -433,40 +520,126 @@
     for (var c = 0; c < list.length; c++) {
       var p = list[c], card = el('div', 'card', holder);
       var img = el('div', 'img', card);
-      // Narrow: the poster (the backdrop cropped without one); the wide card fades its backdrop in over it, loaded then.
+      // Posters only (TMDB's w185, light on memory); the focused title's photo is the showcase above the row.
       var poster = el('div', 'layer', img);
-      poster.style.backgroundImage = 'url(' + (p.poster ? Data.image(p.poster, 'w342') : Data.image(p.backdrop, 'w780')) + ')';
+      poster.style.backgroundImage = 'url("' + (p.poster ? Data.image(p.poster, 'w185') : Data.image(p.backdrop, 'w300')) + '")';
+      if (!p.poster) el('div', 'pname', img, p.title);   // where it streams: said once, under the stage
       el('div', 'layer back', img);
-      el('div', 'name', card, p.title);
-      if (p.meta) el('div', 'meta', card, p.meta);
+      if (p.kind === 'tv' && TAB_KIND[st.tab] === 'mine') episodeBadge(p, img);
       hover(card, Z.CARDS, c);
+      holdable(card);
     }
     st.card = Math.min(st.card, Math.max(0, list.length - 1));
     if (!list.length && st.zone === Z.CARDS) st.zone = Z.SHELF;
     backdrop(list.length ? Data.image(list[st.card].backdrop, 'w300') : '');
+    stageAt = -1;
     updateFocus();
   }
 
-  /**
-   * The card with focus (st.card, also while focus is elsewhere) is the wide one, the others narrow; past the third the
-   * row scrolls a card at a time (the holder slides), and the cards at the edges lose their text. Only the holder's
-   * transform and the backdrop's opacity animate: the widths change at once (older TVs).
-   */
-  function layoutCards() {
-    var holder = $('cards'), nodes = holder.children, left = 80, scroll = Math.max(0, st.card - 2) * 360;
-    for (var i = 0; i < nodes.length; i++) {
-      var wide = i === st.card, w = wide ? 1040 : 320, n = nodes[i], at = left - scroll;
-      n.style.left = left + 'px';
-      n.style.width = w + 'px';
-      setClass(n, 'wide', wide);
-      setClass(n, 'edge', at < 0 || at > 1740);
-      if (wide && !n.getAttribute('data-back') && cards[i]) {
-        n.setAttribute('data-back', '1');
-        n.querySelector('.back').style.backgroundImage = 'url(' + Data.image(cards[i].backdrop, 'w1280') + ')';
-      }
-      left += w + 40;
+  /** The row's titles: the tab's picks, or the chosen genre's (fetched once, then kept for 6 hours). */
+  function cardList() {
+    var kind = TAB_KIND[st.tab], g = Data.GENRES[st.genre];
+    if (kind === 'mine') {
+      return myList().filter(function (p) {
+        return !st.genre || (p.genres || []).indexOf(g.name) >= 0 || (p.meta || '').indexOf(g.name) >= 0;
+      });
     }
-    holder.style.webkitTransform = holder.style.transform = 'translateX(' + (-scroll) + 'px)';
+    if (!st.genre) return Data.picks(kind);
+    var hit = Data.genreNow(kind, g);
+    if (hit) return hit;
+    heroWait = 'Procurando ' + g.name.toLowerCase() + ' nos seus apps…';
+    Data.byGenre(kind, g, function () {
+      heroWait = '';
+      if (Data.GENRES[st.genre] === g && TAB_KIND[st.tab] === kind) renderCards();
+    });
+    return [];
+  }
+
+  // MARK: - Stage: the focused title large in the middle of its row, its photo whole; its name and where it streams
+  // under it, nothing over the photo (as the stage on constanciodev.com.br)
+
+  var heroWait = '';
+
+  function showHero() {
+    var box = $('herotext'), p = cards[Math.min(st.card, cards.length - 1)];
+    if (!box) return;
+    box.innerHTML = '';
+    if (!p) {
+      if (st.genre) el('div', 'hwait', box, heroWait || 'Nada de ' + Data.GENRES[st.genre].name.toLowerCase() + ' nos seus apps agora.');
+      return;
+    }
+    el('div', 'htitle', box, p.title);
+    var line = el('div', 'hmeta', box), app = p.app && Data.appFor(p.app);
+    var about = (p.meta || '').replace(' · ' + p.service, '').replace(p.service, '');
+    el('span', '', line, [p.year, about].filter(function (x) { return x; }).join(' · '));
+    if (p.service) {
+      var where = el('span', 'hwhere' + (app ? '' : ' off'), line);
+      if (app) serviceBadge(p, where);
+      el('span', '', where, app ? p.service : 'Na ' + p.service + ' (app não instalado)');
+    }
+  }
+
+  function renderGenres() {
+    var box = $('genres');
+    box.innerHTML = '';
+    for (var i = 0; i < Data.GENRES.length; i++) hover(el('div', 'genre', box, Data.GENRES[i].name), Z.GENRE, i);
+  }
+
+  /** A chip applies once the focus rests on it, as the tabs do (a run along the row fetches nothing). */
+  function genreSoon() {
+    clearTimeout(genreTimer);
+    genreTimer = setTimeout(applyGenre, 450);
+  }
+
+  function applyGenre() {
+    clearTimeout(genreTimer);
+    if (genreAt === st.genre) return;
+    st.genre = genreAt;
+    st.card = 0;
+    renderCards();
+    layoutCards();
+  }
+
+  // The stage's card in the middle; the posters on each side, fading with distance; the rest not drawn at all.
+  /** The stage's photo once loaded: until then the stage stays dark rather than show the poster blown up. */
+  function showPhoto(layer, url) {
+    var img = new Image();
+    layer.setAttribute('data-url', url);
+    img.onload = function () {
+      if (layer.getAttribute('data-url') !== url) return;   // left the stage while loading
+      layer.style.backgroundImage = 'url("' + url + '")';
+      setClass(layer, 'ready', true);
+    };
+    img.src = url;
+  }
+
+  var STAGE_LEFT = 600, STAGE_W = 720, SIDE_W = 180, SIDE_GAP = 20, SIDE_SEEN = 4, stageAt = -1;
+
+  function layoutCards() {
+    var nodes = $('cards').children;
+    for (var i = 0; i < nodes.length; i++) {
+      var d = i - st.card, n = nodes[i], back = n.querySelector('.back');
+      var left = d === 0 ? STAGE_LEFT : d < 0 ? STAGE_LEFT + d * (SIDE_W + SIDE_GAP)
+        : STAGE_LEFT + STAGE_W + SIDE_GAP + (d - 1) * (SIDE_W + SIDE_GAP);
+      n.style.left = left + 'px';
+      n.className = n.className.replace(/\s*\b(stage|side|far|off)\b/g, '') +
+        (d === 0 ? ' stage' : Math.abs(d) > SIDE_SEEN ? ' off' : Math.abs(d) > 1 ? ' far' : ' side');
+      if (d === 0 && cards[i] && !back.getAttribute('data-url')) showPhoto(back, Data.image(cards[i].backdrop, 'w780'));
+      else if (d !== 0 && back.getAttribute('data-url')) {
+        back.removeAttribute('data-url');
+        back.style.backgroundImage = '';   // one 780 px photo decoded at a time
+        setClass(back, 'ready', false);
+      }
+      if (Math.abs(d) === 1 && cards[i]) new Image().src = Data.image(cards[i].backdrop, 'w780');   // next one ready
+    }
+    if (stageAt !== st.card && nodes[st.card]) {   // one short pulse of the edge when the title on stage changes
+      stageAt = st.card;
+      var edge = nodes[st.card];
+      setClass(edge, 'pulsa', false);
+      void edge.offsetWidth;
+      setClass(edge, 'pulsa', true);
+    }
+    showHero();
   }
 
   var bgUrl = null, bgFront = 'bgA';
@@ -544,6 +717,7 @@
       t.style.height = th + 'px';
       face(shelf[i], t, wordFit(shelf[i].title, tw, 30));
       hover(t, Z.SHELF, i);
+      holdable(t);
     }
     // More apps than fit: a small arrow inside the glass's edge on each side that has more, where no tile reaches
     // even focused (inside the screen's safe area, as on Android).
@@ -582,6 +756,1028 @@
     placeTiles();
   }
 
+  /** The focused app's name under its tile: logos alone don't say which Globoplay or LG app it is. */
+  function showTileName() {
+    var label = $('tilename'), app = st.zone === Z.SHELF ? shelf[st.shelf] : null;
+    if (!label) return;
+    label.style.opacity = app ? '1' : '0';
+    if (!app) { setClass($('morehint'), 'away', false); return; }
+    label.textContent = app.title;
+    var center = tileLeft + (st.shelf - shelfFirst) * tileStep + (tileStep - 48) / 2;
+    label.style.left = Math.round(center - 300) + 'px';
+    var hint = $('morehint'), name = label.getBoundingClientRect(), under = hint && hint.getBoundingClientRect();
+    // the bottom line holds one text: the hint gives way while the app's name would cover it
+    if (hint) setClass(hint, 'away', !!under && under.width > 0 && name.left < under.right + 20);
+  }
+
+  // MARK: - System stats (CPU, RAM, network), only while the home screen shows
+
+  var STATS_EVERY = 5000;
+
+  function level(value, warn, alarm) {
+    return value >= alarm ? ' alarm' : value >= warn ? ' warn' : '';
+  }
+
+  function decimal(n) {
+    return n.toFixed(1).replace('.', ',');
+  }
+
+  var lastStats = null;
+
+  function speedText(kbps) {
+    return kbps === undefined ? '—' : kbps >= 1000 ? decimal(kbps / 1000) + ' Mb/s' : kbps + ' kb/s';
+  }
+
+  /**
+   * The network button, icon only: green bars for the Wi-Fi's signal (1 to 4) or the cable when connected, red when
+   * not. OK opens the TV's network settings.
+   */
+  function showNetwork() {
+    var button = $('buttons').children[0], net = lastStats && lastStats.net;
+    if (!button) return;
+    var down = !!net && !net.up, wired = !!net && net.kind === 'ethernet', signal = net ? net.signal : -1;
+    // Bars over the full fan (Material's network_wifi), so a weak signal still reads as Wi-Fi.
+    var bars = signal < 0 || signal >= 80 ? 'network_wifi' : signal >= 55 ? 'network_wifi_3_bar'
+      : signal >= 30 ? 'network_wifi_2_bar' : 'network_wifi_1_bar';
+    setClass(button, 'offline', down);
+    setClass(button, 'online', !!net && !down);
+    var icon = 'icons/sym-' + (down ? 'wifi_off' : wired ? 'lan' : bars) + '.svg', s = button.querySelector('.sym');
+    s.style.webkitMaskImage = s.style.maskImage = 'url(' + icon + ')';
+  }
+
+  /** The top shows only what's off (a busy CPU, full RAM, no network); the drawer's panel shows everything. */
+  function showStats(s) {
+    lastStats = s;
+    showNetwork();
+    var box = $('stats');
+    if (box) {
+      var parts = [], share = s && s.mem ? Math.round(s.mem.usedMb / s.mem.totalMb * 100) : 0;
+      if (s && s.cpu !== undefined && level(s.cpu, 70, 90)) {
+        parts.push('<span class="stat' + level(s.cpu, 70, 90) + '"><b>CPU</b> ' + s.cpu + '%</span>');
+      }
+      if (s && s.mem && level(share, 92, 97)) parts.push('<span class="stat' + level(share, 92, 97) + '"><b>RAM</b> ' + share + '%</span>');
+      box.innerHTML = parts.join('');
+      box.style.display = parts.length ? '' : 'none';
+    }
+    var panel = $('perf');
+    if (panel) renderPerf(panel);
+  }
+
+  function perfRow(card, top, name, value, share, warn, alarm) {
+    var row = el('div', 'prow', card);
+    row.style.top = top + 'px';
+    el('span', 'pname', row, name);
+    el('span', 'pval', row, value);
+    var bar = el('div', 'pbar', row), fill = el('div', 'pfill' + level(share, warn, alarm), bar);
+    fill.style.width = Math.max(2, Math.min(100, share)) + '%';
+  }
+
+  var devModeHours = -1;
+
+  function renewDevMode() {
+    TV.renewDevMode(function (res) {
+      if (res && res.hours >= 0) devModeHours = res.hours;
+      var panel = $('perf');
+      if (panel) renderPerf(panel);
+    });
+  }
+
+  function renderPerf(card) {
+    card.innerHTML = '';
+    el('div', 'head', card, 'Desempenho da TV');
+    var s = lastStats;
+    if (!s) { el('div', 'side', card, 'lendo…'); return; }
+    var days = devModeHours >= 0 ? 'Dev Mode: ' + Math.floor(devModeHours / 24) + ' dias' : 'a cada 5 s';
+    el('div', 'side' + (devModeHours >= 0 && devModeHours < 240 ? ' bad' : ''), card, days);
+    var mem = s.mem || {usedMb: 0, totalMb: 1, swapUsedMb: 0, swapTotalMb: 0};
+    perfRow(card, 84, 'CPU', s.cpu === undefined ? '—' : s.cpu + '%', s.cpu || 0, 70, 90);
+    perfRow(card, 138, 'RAM', mem.usedMb + ' / ' + mem.totalMb + ' MB', mem.usedMb / mem.totalMb * 100, 92, 97);
+    if (mem.swapTotalMb) {
+      perfRow(card, 192, 'SWAP', mem.swapUsedMb + ' / ' + mem.swapTotalMb + ' MB', mem.swapUsedMb / mem.swapTotalMb * 100, 75, 90);
+    }
+    var net = s.net, row = el('div', 'prow net', card);
+    row.style.top = '246px';
+    el('span', 'pname', row, net && net.kind === 'ethernet' ? 'CABO' : 'WI-FI');
+    el('span', 'pval' + (net && net.up ? ' ok' : ' bad'), row, net ? (net.up ? '● ' + speedText(net.kbps) : '● desconectado') : '—');
+
+  }
+
+  function pollStats() {
+    if (document.hidden || saverOn || ambientOn) return;
+    TV.stats(showStats);
+  }
+
+  // MARK: - Profiles: each keeps its own shelf order, theme, accent color and kids mode
+
+  var PROFILE_KEYS = ['shelf', 'theme', 'accent', 'kids', 'mylist', 'recent', 'infoGames', 'infoF1', 'infoNews', 'showPerf',
+    'bg', 'starsMove'];
+  var PROFILE_NAMES = ['Maycon', 'Família', 'Crianças', 'Visitas', 'Convidado'];
+  var ACCENTS = [['red', 'Vermelho'], ['pink', 'Rosa'], ['blue', 'Azul'], ['green', 'Verde'], ['purple', 'Roxo'],
+    ['orange', 'Laranja'], ['yellow', 'Amarelo']];
+  var ACCENT_RGB = {red: '229,72,77', pink: '236,72,153', blue: '59,130,246', green: '34,197,94', purple: '139,92,246', orange: '249,115,22',
+    yellow: '255,225,0'};
+  var deleteArmed = false;
+
+  function profiles() { return Prefs.get('profiles', [{name: PROFILE_NAMES[0]}]); }
+  function current() { return Math.min(Prefs.get('profile', 0), profiles().length - 1); }
+
+  /** The live settings of the current profile, as stored in its slot. */
+  function snapshot() {
+    var p = {name: profiles()[current()].name};
+    for (var i = 0; i < PROFILE_KEYS.length; i++) p[PROFILE_KEYS[i]] = Prefs.get(PROFILE_KEYS[i], undefined);
+    return p;
+  }
+
+  function switchProfile(to) {
+    var list = profiles().slice();
+    list[current()] = snapshot();
+    loadProfile(list, to);
+  }
+
+  /** Makes slot `to` of `list` the live profile: its settings become the current ones. */
+  function loadProfile(list, to) {
+    var next = list[to] || {};
+    for (var i = 0; i < PROFILE_KEYS.length; i++) Prefs.set(PROFILE_KEYS[i], next[PROFILE_KEYS[i]]);
+    Prefs.set('profiles', list);
+    Prefs.set('profile', to);
+    profileChanged();
+  }
+
+  function profileChanged() {
+    deleteArmed = false;
+    applyExtras();
+    renderPanels();
+    cards = [];
+    renderCards();
+    applyAccent();
+    checkNight();
+    pickShelf();
+    renderShelf();
+    Data.settingsChanged();
+    Data.refresh();
+    toast('Perfil: ' + profiles()[current()].name);
+  }
+
+  /** What the info slot beside the tabs shows, per profile (Home Settings). */
+  function showsInfo(kind) { return Prefs.get(kind, true); }
+
+  /** The slot again with the profile's choices: off ones go, and their data isn't fetched. */
+  function applyExtras() {
+    setClass(body, 'no-extras', !showsInfo('infoGames') && !showsInfo('infoF1') && !showsInfo('infoNews'));
+    pollFootball();
+    pollF1();
+    pollInfo();
+  }
+
+  function backgroundName() {
+    for (var i = 0; i < BACKGROUNDS.length; i++) if (BACKGROUNDS[i][0] === Prefs.get('bg', 'stars')) return BACKGROUNDS[i][1];
+    return BACKGROUNDS[0][1];
+  }
+
+  function applyAccent() {
+    var accent = Prefs.get('accent', 'red');
+    body.className = body.className.replace(/\s*accent-\w+/g, '') + ' accent-' + accent;
+    drawStars();
+  }
+
+  function profileRows() {
+    var list = profiles(), at = current(), accent = Prefs.get('accent', 'red'), a = 0;
+    for (var k = 0; k < ACCENTS.length; k++) if (ACCENTS[k][0] === accent) a = k;
+    var rows = [
+      {label: 'Perfil', value: list[at].name + (list.length > 1 ? '  (' + (at + 1) + '/' + list.length + ')' : ''),
+        step: function (d) { if (list.length > 1) switchProfile((at + (d || 1) + list.length) % list.length); }},
+      {label: 'Nome do perfil', value: list[at].name,
+        step: function (d) {
+          var copy = profiles().slice(), i = PROFILE_NAMES.indexOf(copy[at].name);
+          copy[at] = snapshot();
+          copy[at].name = PROFILE_NAMES[(i + (d || 1) + PROFILE_NAMES.length) % PROFILE_NAMES.length];
+          Prefs.set('profiles', copy);
+        }},
+      {label: 'Cor de destaque', value: ACCENTS[a][1],
+        step: function (d) { Prefs.set('accent', ACCENTS[(a + (d || 1) + ACCENTS.length) % ACCENTS.length][0]); applyAccent(); }},
+      {label: 'Modo infantil', toggle: !!Prefs.get('kids', false),
+        step: function () { Prefs.set('kids', !Prefs.get('kids', false)); Data.settingsChanged(); Data.refresh(); }},
+      {label: 'Novo perfil', value: '+',
+        step: function (d) {
+          if (d < 0) return;
+          var copy = profiles().slice();
+          copy[at] = snapshot();
+          copy.push({name: PROFILE_NAMES[copy.length % PROFILE_NAMES.length]});
+          Prefs.set('profiles', copy);
+          switchProfile(copy.length - 1);
+        }}
+    ];
+    if (list.length > 1) {
+      rows.push({label: deleteArmed ? 'Confirmar: excluir ' + list[at].name + '?' : 'Excluir este perfil', value: '×',
+        step: function (d) {
+          if (d < 0) return;
+          if (!deleteArmed) { deleteArmed = true; return; }
+          deleteArmed = false;
+          var copy = profiles().slice();
+          copy.splice(at, 1);
+          loadProfile(copy, Math.max(0, at - 1));
+        }});
+    }
+    return rows;
+  }
+
+  // MARK: - Backup: every change goes to a file on the TV; a fresh install (nothing stored yet) restores from it
+
+  var backupTimer = 0;
+
+  function backupSoon() {
+    clearTimeout(backupTimer);
+    backupTimer = setTimeout(function () { TV.backup('save', Prefs.dump()); }, 3000);
+  }
+
+  function restoreBackup() {
+    var empty = true;
+    try { empty = !localStorage.getItem('fmtv.prefs'); } catch (e) {}
+    if (!empty) return;
+    TV.backup('load', '', function (res) {
+      var data = res && res.data;
+      if (!data) return;
+      try { JSON.parse(data); localStorage.setItem('fmtv.prefs', data); } catch (e) { return; }
+      location.reload();
+    });
+  }
+
+  // MARK: - Quick controls (the TV's remote control API; the TV asks once to allow them)
+
+  var SLEEP_STEPS = [0, 30, 60, 90, 120], sleepStep = 0;
+
+  function sleepLabel() { return SLEEP_STEPS[sleepStep] ? 'Timer ' + SLEEP_STEPS[sleepStep] + ' min' : 'Timer'; }
+
+  function screenOff() {
+    toast('Tela apagada, som ligado (bom para música). Aperte qualquer botão para acender.');
+    TV.control('com.webos.service.tvpower/power/turnOffScreen', {}, function (res) {
+      if (!res) toast('A TV não deixou apagar a tela (permita o Free My TV quando ela perguntar).');
+    });
+  }
+
+  // MARK: - A title's page (OK on a pick or a search result): what it is and its actions, named, as on Netflix
+
+  var dtTitle = null, dtFrom = null, dtButton = 0;
+
+  function detailButtons() {
+    var p = dtTitle, out = [], keys = (p && (p.apps || (p.app ? [p.app] : []))) || [], via = p && pickTarget(p);
+    if (via && via.params) {   // Home Settings > Open picks in Nuvio: its own link first
+      out.push({label: '▶  Assistir no ' + via.app.title, run: function () { closeDetail(); launcher(via.app.id, via.app.title, via.params)(); }});
+    }
+    for (var i = 0; i < keys.length && out.length < 3; i++) {
+      (function (key) {
+        var app = Data.appFor(key);
+        if (!app) return;
+        out.push({label: (out.length ? '▶  ' : '▶  Assistir no ') + app.title, run: function () {
+          closeDetail();
+          var q = {};
+          for (var k in p) if (p.hasOwnProperty(k)) q[k] = p[k];
+          q.app = key;   // the link for the app picked, not the first one
+          openTitle(q, app, null);
+        }});
+      })(keys[i]);
+    }
+    out.push({label: 'Trailer', run: function () { closeDetail(); playTrailerOf(p); }});
+    out.push({label: inMyList(p) ? '− Tirar da minha lista' : '+ Minha lista', run: function () {
+      toggleMyList(p);
+      var b = document.querySelectorAll('#detail .dbtn')[dtButton];
+      if (b) b.textContent = inMyList(p) ? '− Tirar da minha lista' : '+ Minha lista';
+    }});
+    out.push({label: 'Voltar', run: closeDetail});
+    return out;
+  }
+
+  function openDetail(p) {
+    if (!p) return;
+    note('pagina ' + p.title + ' app=' + p.app);
+    // A search field left focused under the page would take its keys: OK would search again, not press Watch
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    var page = $('detail'), app = p.app && Data.appFor(p.app);
+    dtTitle = p;
+    dtFrom = st.zone;
+    dtButton = 0;
+    page.innerHTML = '';
+    var art = el('div', 'art', page);
+    if (p.backdrop) art.style.backgroundImage = 'url("' + Data.image(p.backdrop, 'w1280') + '")';
+    el('div', 'shade', page);
+    var info = el('div', 'info', page);
+    el('div', 'dtitle', info, p.title);
+    var count = (p.apps || []).length;
+    var where = app ? (count > 1 ? 'Em ' + count + ' dos seus apps' : 'No ' + app.title)
+      : p.service ? 'Na ' + p.service + ' (app não instalado)' : p.paid ? p.paid : 'Sem streaming no Brasil';
+    var about = p.meta || (p.genres || []).slice(0, 2).join(' · ');
+    if (p.service) about = about.replace(' · ' + p.service, '');   // the service is in 'where'
+    el('div', 'dmeta', info, [p.year, about, where].filter(function (x) { return x; }).join('  ·  '));
+    if (p.kind === 'tv') {
+      Data.episodes(p, function (n) {
+        if (n && dtTitle === p) el('div', 'depisode', info, n.state === 'new' ? episodeText(n) : 'Próximo episódio: ' + episodeText(n));
+      });
+    }
+    if (app && p.elsewhere && p.elsewhere.length) el('div', 'delse', info, 'Também em ' + p.elsewhere.slice(0, 3).join(', ') + ' (sem o app)');
+    var row = el('div', 'dbtns', info), buttons = detailButtons();
+    for (var i = 0; i < buttons.length; i++) hover(el('div', 'dbtn' + (i === 0 && app ? ' primary' : ''), row, buttons[i].label), Z.DETAIL, i);
+    st.zone = Z.DETAIL;
+    setClass(page, 'open', true);
+    updateFocus();
+  }
+
+  function closeDetail() {
+    setClass($('detail'), 'open', false);
+    $('detail').innerHTML = '';   // its 1280 px photo leaves memory with it
+    st.zone = dtFrom || Z.CARDS;
+    updateFocus();
+  }
+
+  // MARK: - Help: where everything is, from Home Settings
+
+  var HELP_ROWS = [
+    ['Apps', 'na fileira de baixo; ← → percorre, OK abre'],
+    ['Mover um app', 'segure OK nele e use ← →; OK solta'],
+    ['Entradas (HDMI, TV)', 'desça (▼) abaixo dos apps'],
+    ['Ajustes da TV', 'desça (▼) abaixo dos apps'],
+    ['Pesquisar', 'lupa no topo (ou pelo celular, pelo QR code)'],
+    ['Trailer', 'OK num filme ou série: botão Trailer'],
+    ['Controles', 'botão Controles no topo: só o som, timer, internet'],
+    ['Voltar', 'o botão Voltar nunca sai daqui']
+  ];
+
+  function openHelp() {
+    var box = $('help').firstChild;
+    setClass($('settings'), 'open', false);
+    box.innerHTML = '';
+    el('div', 'title', box, 'Onde fica cada coisa');
+    var list = el('div', 'list', box), holder = el('div', 'rows', list);
+    list.style.height = HELP_ROWS.length * 78 + 'px';
+    for (var i = 0; i < HELP_ROWS.length; i++) {
+      var row = el('div', 'row', holder, HELP_ROWS[i][0]);
+      el('span', 'value', row, HELP_ROWS[i][1]);
+    }
+    el('div', 'hint', box, 'OK ou Voltar fecha · de novo em Configurações da Home › Ajuda');
+    st.zone = Z.HELP;
+    setClass($('help'), 'open', true);
+    updateFocus();
+  }
+
+  function closeHelp() {
+    setClass($('help'), 'open', false);
+    st.zone = Z.SHELF;
+    updateFocus();
+  }
+
+  // The Controls sheet (top button): what the remote has no button for.
+  var ctrlRow = 0;
+
+  function controlRows() {
+    return [
+      {label: 'Controle pelo celular', value: '›', run: function () { closeControls(); openPairing(); }},
+      {label: 'Só o som (apaga a tela)', value: '›', run: function () { closeControls(); screenOff(); }},
+      {label: 'Timer para desligar', value: SLEEP_STEPS[sleepStep] ? SLEEP_STEPS[sleepStep] + ' min' : 'desligado',
+        step: function (d) { cycleSleep(d); renderControls(); }, run: function () { cycleSleep(1); renderControls(); }},
+      {label: 'Testar a internet', value: '›', run: function () { speedTest(); }}
+    ];
+  }
+
+  function renderControls() {
+    var box = $('controls').firstChild, rows = controlRows();
+    box.innerHTML = '';
+    el('div', 'title', box, 'Controles');
+    var list = el('div', 'list', box), holder = el('div', 'rows', list);
+    list.style.height = rows.length * 78 + 'px';
+    for (var i = 0; i < rows.length; i++) {
+      var row = el('div', 'row', holder, rows[i].label);
+      el('span', 'value', row, rows[i].value);
+      hover(row, Z.CTRL, i);
+    }
+    el('div', 'hint', box, 'OK escolhe · ← → muda o timer · Voltar fecha');
+    updateFocus();
+  }
+
+  function openControls() {
+    st.zone = Z.CTRL;
+    ctrlRow = 0;
+    renderControls();
+    setClass($('controls'), 'open', true);
+  }
+
+  function closeControls() {
+    setClass($('controls'), 'open', false);
+    st.zone = Z.TOP;
+    st.top = NTABS + 2;
+    updateFocus();
+  }
+
+  // MARK: - Pairing a phone as a remote: the QR code carries the link and a fresh code; scanning it pairs the phone
+
+  function openPairing() {
+    var box = $('pairing').firstChild;
+    box.innerHTML = '';
+    el('div', 'title', box, 'Controle pelo celular');
+    var hint = el('div', 'hint', box, 'Gerando o código…');
+    st.zone = Z.PAIR;
+    setClass($('pairing'), 'open', true);
+    updateFocus();
+    TV.service('phone', {action: 'show'}, function (res) {
+      if (st.zone !== Z.PAIR) return;
+      if (!res || !res.qr) { hint.textContent = 'Não deu para abrir a página do celular (a TV está na rede?).'; return; }
+      drawQr(el('canvas', 'qrbig', box), res.qr);
+      hint.textContent = 'Aponte a câmera do celular (o código vale 2 minutos). Ou abra ' + res.url.replace('http://', '') +
+        ' e digite ' + res.code + '. Depois, é só abrir o mesmo endereço.';
+    });
+  }
+
+  function closePairing() {
+    setClass($('pairing'), 'open', false);
+    $('pairing').firstChild.innerHTML = '';
+    st.zone = Z.TOP;
+    st.top = NTABS + 2;
+    updateFocus();
+  }
+
+  function speedTest() {
+    toast('Testando a internet (baixa 10 MB)…');
+    TV.service('speedTest', {}, function (res) {
+      toast(res && res.mbps ? 'Internet da TV: ' + String(res.mbps).replace('.', ',') + ' Mb/s' : 'Não deu para testar agora.');
+    });
+  }
+
+  function cycleSleep(d) {
+    sleepStep = (sleepStep + (d < 0 ? -1 : 1) + SLEEP_STEPS.length) % SLEEP_STEPS.length;
+    var minutes = SLEEP_STEPS[sleepStep];
+    // A control call first, so the service has the TV's key and the person has allowed it.
+    TV.control('audio/getStatus', {}, function () {
+      TV.sleep(minutes, function (res) {
+        toast(!res || (minutes && !res.at) ? 'Não deu para ligar o timer (permita o Free My TV na TV).'
+          : minutes ? 'A TV desliga em ' + minutes + ' min.' : 'Timer desligado.');
+      });
+    });
+  }
+
+  // MARK: - Headlines and exchange rates: one quiet line at the top, a new headline every 10 s
+
+  var NEWS_EVERY = 10000, INFO_EVERY = 10 * 60000, news = [], newsAt = 0, rates = null;
+
+  function money(v) { return v ? v.toFixed(2).replace('.', ',') : '—'; }
+
+  /** The headline's card in the info slot, refreshed with the next headline each time the slot comes back to it. */
+  function showNews() {
+    var box = $('football'), card = $('newscard');
+    if (!box || !news.length || !showsInfo('infoNews')) { if (card) card.parentNode.removeChild(card); return; }
+    if (!card) { card = el('div', 'match news', box); card.id = 'newscard'; }
+    var h = news[newsAt++ % news.length];
+    card.innerHTML = '';
+    el('span', 'src', card, h.source === 'GE' ? 'ge' : 'g1');
+    el('span', 'headline', card, h.title);
+  }
+
+  // One info slot beside the tabs: the match, the next Grand Prix and a headline take turns there, one at a time,
+  // so nothing overlaps the tabs. A live match stays put.
+  var INFO_TURN = 8000, infoAt = 0;
+
+  function rotateInfo() {
+    var cards = $('football').children, live = null, i;
+    if (!cards.length || document.hidden) return;
+    for (i = 0; i < cards.length; i++) if (/\blive\b/.test(cards[i].className)) live = cards[i];
+    var shown = live || cards[infoAt++ % cards.length];
+    if (shown.id === 'newscard' && !live) showNews();
+    for (i = 0; i < cards.length; i++) setClass(cards[i], 'on', cards[i] === shown);
+  }
+
+  function pollInfo() {
+    if (!showsInfo('infoNews')) { news = []; showNews(); return; }
+    TV.service('headlines', {}, function (res) {
+      if (res) { news = res.headlines || []; rates = res.rates || null; showNews(); }
+    });
+  }
+
+  // MARK: - Teams to follow: ← → changes the league, OK marks a team (up to 3)
+
+  var LEAGUES = [['bra.1', 'Brasileirão'], ['conmebol.libertadores', 'Libertadores'], ['eng.1', 'Premier League'],
+    ['esp.1', 'La Liga'], ['ita.1', 'Serie A (Itália)']];
+  var MAX_TEAMS = 3, tmLeague = 0, tmList = [], tmRow = 0;
+
+  function isFollowed(league, id) {
+    var list = followed();
+    for (var i = 0; i < list.length; i++) if (list[i].league === league && list[i].id === id) return true;
+    return false;
+  }
+
+  function renderTeams() {
+    var box = $('teampick').firstChild, league = LEAGUES[tmLeague];
+    box.innerHTML = '';
+    el('div', 'title', box, '‹  ' + league[1] + '  ›');
+    var list = el('div', 'list', box), holder = el('div', 'rows', list);
+    list.style.height = Math.min(Math.max(tmList.length, 1), 7) * 78 + 'px';
+    for (var i = 0; i < tmList.length; i++) {
+      var row = el('div', 'row', holder, tmList[i].name);
+      if (isFollowed(league[0], tmList[i].id)) sym('check', el('span', 'value', row));
+      hover(row, Z.TEAMS, i);
+    }
+    el('div', 'hint', box, tmList.length ? '← → muda a liga · OK marca (até ' + MAX_TEAMS + ') · Voltar sai' : 'Carregando…');
+    updateFocus();
+  }
+
+  function loadTeams() {
+    var want = tmLeague;
+    tmList = [];
+    tmRow = 0;
+    renderTeams();
+    TV.service('teams', {league: LEAGUES[want][0]}, function (res) {
+      if (want !== tmLeague || st.zone !== Z.TEAMS) return;
+      tmList = (res && res.teams) || [];
+      renderTeams();
+    });
+  }
+
+  function openTeams() {
+    setClass($('settings'), 'open', false);
+    st.zone = Z.TEAMS;
+    setClass($('teampick'), 'open', true);
+    loadTeams();
+  }
+
+  function toggleTeam() {
+    var t = tmList[tmRow], league = LEAGUES[tmLeague][0];
+    if (!t) return;
+    var list = followed().filter(function (x) { return !(x.league === league && x.id === t.id); });
+    if (list.length === followed().length) {
+      if (list.length >= MAX_TEAMS) { toast('Até ' + MAX_TEAMS + ' times: desmarque um antes.'); return; }
+      list.push({league: league, id: t.id, name: t.name});
+    }
+    Prefs.set('teams', list);
+    renderTeams();
+    pollFootball();
+  }
+
+  function closeTeams() {
+    setClass($('teampick'), 'open', false);
+    openSettings();
+  }
+
+  // MARK: - Football: the followed teams' live, next or last match beside the tabs
+
+  // Followed teams (ESPN ids, league slug as in its API), picked in Home Settings; Flamengo until then.
+  function followed() { return Prefs.get('teams', [{league: 'bra.1', id: '819', name: 'Flamengo'}]); }
+  var FOOTBALL_EVERY = 5 * 60000, FOOTBALL_LIVE_EVERY = 60000, footballTimer = 0;
+  var WEEKDAYS = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+
+  function teamLogo(id) {
+    return 'https://a.espncdn.com/combiner/i?img=/i/teamlogos/soccer/500/' + id + '.png&w=56&h=56';
+  }
+
+  function two(n) { return (n < 10 ? '0' : '') + n; }
+
+  /** The match worth showing: live first, else one starting within 3 days, else a result from the last 2 days. */
+  function shownMatch(t) {
+    var now = Date.now(), next = t.next, last = t.last;
+    if (next && next.state === 'in') return next;
+    if (next && new Date(next.date).getTime() - now < 3 * 86400000) return next;
+    if (last && now - new Date(last.date).getTime() < 2 * 86400000) return last;
+    return next || last;
+  }
+
+  function showFootball(res) {
+    var box = $('football'), live = false;
+    if (!box) return;
+    box.innerHTML = '';
+    var teams = (res && res.teams) || [];
+    for (var i = 0; showsInfo('infoGames') && i < teams.length && i < MAX_TEAMS; i++) {
+      var m = teams[i] && shownMatch(teams[i]);
+      if (!m || !m.home || !m.away) continue;
+      var chip = el('div', 'match' + (m.state === 'in' ? ' live' : ''), box);
+      live = live || m.state === 'in';
+      el('img', '', chip).src = teamLogo(m.home.id);
+      var score = m.state === 'pre' ? ' × ' : ' ' + m.home.score + ' × ' + m.away.score + ' ';
+      el('span', 'teams', chip, m.home.abbr + score + m.away.abbr);
+      el('img', '', chip).src = teamLogo(m.away.id);
+      var d = new Date(m.date), when;
+      if (m.state === 'in') when = '● ' + m.clock;
+      else if (m.state === 'post') when = 'fim, ' + two(d.getDate()) + '/' + two(d.getMonth() + 1);
+      else when = WEEKDAYS[d.getDay()] + ' ' + two(d.getDate()) + '/' + two(d.getMonth() + 1) + ' ' + two(d.getHours()) + ':' + two(d.getMinutes());
+      el('span', 'when', chip, when);
+    }
+    clearTimeout(footballTimer);
+    footballTimer = setTimeout(pollFootball, live ? FOOTBALL_LIVE_EVERY : FOOTBALL_EVERY);
+    // The service keeps watching while another app is in front: from 3 h before kickoff until the match ends.
+    for (var w = 0; w < teams.length && !live; w++) {
+      var nx = teams[w] && teams[w].next;
+      if (nx && nx.state === 'pre' && new Date(nx.date).getTime() - Date.now() < 3 * 3600000) live = true;
+    }
+    if (live) TV.watchGoals(followed());
+    var soon = teams[0] && teams[0].next;
+    if (soon && soon.state === 'pre' && soon.home && soon.away) {
+      TV.service('remind', {date: soon.date, text: soon.home.abbr + ' × ' + soon.away.abbr + ' começa em 10 minutos'});
+    }
+    if (f1Race && showsInfo('infoF1')) footballChip(box, 'F1, GP ' + f1Race.name, f1When(f1Race.date));
+    showNews();
+    rotateInfo();
+  }
+
+  var f1Race = null;
+
+  function f1When(date) {
+    var d = new Date(date);
+    return WEEKDAYS[d.getDay()] + ' ' + two(d.getDate()) + '/' + two(d.getMonth() + 1);
+  }
+
+  function footballChip(box, text, when) {
+    var chip = el('div', 'match f1', box);
+    el('span', 'teams', chip, text);
+    el('span', 'when', chip, when);
+  }
+
+  function pollF1() {
+    if (!showsInfo('infoF1')) { f1Race = null; return; }
+    TV.service('f1', {}, function (res) { f1Race = res && res.race; });
+  }
+
+  function pollFootball() {
+    clearTimeout(footballTimer);
+    if (document.hidden) { footballTimer = setTimeout(pollFootball, FOOTBALL_EVERY); return; }
+    TV.football(showsInfo('infoGames') ? followed() : [], showFootball);   // still runs: it draws F1 and news too
+  }
+
+  // MARK: - Constellation background: drawn once at half size, so it costs no frames.
+
+  // Optional drift (Home Settings, off by default): 10 frames a second, only while the home screen shows and rests.
+  var STAR_FPS = 10, stars = [], starTimer = 0;
+
+  function drawStars() {
+    var canvas = $('stars');
+    if (!canvas || !canvas.getContext) return;
+    var w = canvas.width, h = canvas.height;
+    if (!stars.length) {
+      for (var n = 0; n < 46; n++) {
+        stars.push({x: Math.random() * w, y: Math.random() * h, r: Math.random() * 0.7 + 0.6,
+          vx: (Math.random() - 0.5) * 0.5, vy: (Math.random() - 0.5) * 0.5});
+      }
+    }
+    paintStars(canvas);
+    clearInterval(starTimer);
+    applyBackground();
+    if (Prefs.get('bg', 'stars') === 'stars' && Prefs.get('starsMove', true)) starTimer = setInterval(stepStars, 1000 / STAR_FPS);
+  }
+
+  function stepStars() {
+    if (document.hidden || saverOn || ambientOn || sheetOpen()) return;
+    var canvas = $('stars'), w = canvas.width, h = canvas.height;
+    for (var i = 0; i < stars.length; i++) {
+      var p = stars[i];
+      p.x = (p.x + p.vx + w) % w;
+      p.y = (p.y + p.vy + h) % h;
+    }
+    paintStars(canvas);
+  }
+
+  // Backgrounds a profile picks: the constellation, glows in its accent, the highlighted title's photo, or plain.
+  var BACKGROUNDS = [['stars', 'Constelação'], ['glow', 'Gradiente'], ['photo', 'Foto do destaque'], ['plain', 'Liso']];
+
+  function applyBackground() {
+    var kind = Prefs.get('bg', 'stars');
+    body.className = body.className.replace(/\s*bg-\w+/g, '') + ' bg-' + kind;
+    if (kind === 'glow') paintGlow($('stars'));
+    else if (kind !== 'stars') $('stars').getContext('2d').clearRect(0, 0, 960, 540);
+  }
+
+  /** Two soft glows in the accent, drawn once: a gradient without CSS variables, which old TVs lack. */
+  function paintGlow(canvas) {
+    var g = canvas.getContext('2d'), rgb = ACCENT_RGB[Prefs.get('accent', 'red')] || ACCENT_RGB.red;
+    g.clearRect(0, 0, canvas.width, canvas.height);
+    var spots = [[820, 40, 520, 0.34], [80, 470, 420, 0.22]];
+    for (var i = 0; i < spots.length; i++) {
+      var s = spots[i], grad = g.createRadialGradient(s[0], s[1], 0, s[0], s[1], s[2]);
+      grad.addColorStop(0, 'rgba(' + rgb + ',' + s[3] + ')');
+      grad.addColorStop(1, 'rgba(' + rgb + ',0)');
+      g.fillStyle = grad;
+      g.fillRect(0, 0, canvas.width, canvas.height);
+    }
+  }
+
+  function paintStars(canvas) {
+    if (Prefs.get('bg', 'stars') !== 'stars') return;
+    var g = canvas.getContext('2d'), w = canvas.width, h = canvas.height, reach = 110, pts = stars, i;
+    var rgb = ACCENT_RGB[Prefs.get('accent', 'red')] || ACCENT_RGB.red;
+    g.clearRect(0, 0, w, h);
+    g.lineWidth = 0.6;
+    for (i = 0; i < pts.length; i++) {
+      for (var j = i + 1; j < pts.length; j++) {
+        var dx = pts[i].x - pts[j].x, dy = pts[i].y - pts[j].y, d = Math.sqrt(dx * dx + dy * dy);
+        if (d >= reach) continue;
+        g.strokeStyle = 'rgba(' + rgb + ',' + ((1 - d / reach) * 0.55).toFixed(3) + ')';
+        g.beginPath();
+        g.moveTo(pts[i].x, pts[i].y);
+        g.lineTo(pts[j].x, pts[j].y);
+        g.stroke();
+      }
+    }
+    for (i = 0; i < pts.length; i++) {
+      g.fillStyle = 'rgba(' + rgb + ',0.08)';
+      g.beginPath();
+      g.arc(pts[i].x, pts[i].y, pts[i].r * 3, 0, 6.283);
+      g.fill();
+      g.fillStyle = 'rgba(255,150,150,0.6)';
+      g.beginPath();
+      g.arc(pts[i].x, pts[i].y, pts[i].r, 0, 6.283);
+      g.fill();
+    }
+  }
+
+  // MARK: - Rotating highlight (Home Settings, on by default)
+
+  var ROTATE_EVERY = 8000;
+
+  function rotatePick() {
+    if (!Prefs.get('rotate', true) || document.hidden || saverOn || ambientOn || sheetOpen()) return;
+    if (st.zone === Z.CARDS || st.zone === Z.DRAWER || cards.length < 2 || Date.now() - idleAt < ROTATE_EVERY) return;
+    st.card = (st.card + 1) % cards.length;
+    updateFocus();
+    backdrop(Data.image(cards[st.card].backdrop, 'w300'));
+  }
+
+  // MARK: - Search: a title by name, filtered by kind, genre and the TV's own apps; OK opens the app it streams on
+
+  var SEARCH_COLS = 6, SEARCH_ROW = 520;
+  var srPart = 0, srChip = 0, srItem = 0, srQuery = '', srStatus = '', srAll = [], srShown = [];
+  var srKind = 0, srMine = false, srGenre = 0;   // kind: all, movies, shows; genre: 0 = all, else srGenres()[n - 1]
+
+  function srGenres() {
+    var out = [];
+    for (var i = 0; i < srAll.length; i++) {
+      var gs = srAll[i].genres || [];
+      for (var g = 0; g < gs.length; g++) {
+        if (out.indexOf(gs[g]) < 0) out.push(gs[g]);
+      }
+    }
+    return out.sort();
+  }
+
+  function srCount() {
+    var n = srShown.length;
+    return n ? n + (n > 1 ? ' resultados' : ' resultado') + ' · OK abre · segure OK para o trailer'
+      : 'Nada encontrado com esses filtros.';
+  }
+
+  function srFilter() {
+    var genre = srGenre && !browsing() ? srGenres()[srGenre - 1] : null;
+    srShown = srAll.filter(function (p) {
+      if (srKind === 1 && p.kind !== 'movie') return false;
+      if (srKind === 2 && p.kind !== 'tv') return false;
+      if (srMine && !(p.app && Data.usable(p.app))) return false;
+      return !genre || browsing() || (p.genres || []).indexOf(genre) >= 0;
+    });
+    srItem = Math.min(srItem, Math.max(0, srShown.length - 1));
+  }
+
+  function chipLabels() {
+    var genre = !srGenre ? 'todos' : browsing() ? Data.GENRES[srGenre].name : srGenres()[srGenre - 1];
+    return [['Tudo', 'Filmes', 'Séries'][srKind], (srMine ? '✓ ' : '') + 'Só meus apps', 'Gênero: ' + genre];
+  }
+
+  // Nothing typed: the Genre chip browses a genre on the TV's apps (Data.GENRES); after a search it filters the results.
+  function browsing() { return !srQuery; }
+
+  function browseGenre() {
+    if (!srGenre) {
+      srAll = Prefs.get('recent', []);
+      srFilter();
+      srStatus = srAll.length ? 'Abertos recentemente · digite ou escolha um gênero' : '';
+      renderSearch();
+      return;
+    }
+    var g = Data.GENRES[srGenre], kind = [null, 'movie', 'tv'][srKind];
+    srAll = [];
+    srFilter();
+    srStatus = 'Procurando ' + g.name.toLowerCase() + ' nos seus apps…';
+    renderSearch();
+    Data.byGenre(kind, g, function (list) {
+      if (st.zone !== Z.SEARCH || !browsing() || Data.GENRES[srGenre] !== g) return;
+      srAll = list;
+      srItem = 0;
+      srFilter();
+      srStatus = srCount();
+      renderSearch();
+    });
+  }
+
+  function renderSearch() {
+    var page = $('searchpage'), old = fieldOf('searchpage'), typed = old ? old.value : srQuery;
+    var inField = typingIn('searchpage');
+    page.innerHTML = '';
+    var head = el('div', 'shead', page);
+    el('div', 'eyebrow', head, '// Pesquisar');
+    var field = el('input', '', el('div', 'sfield', head));
+    field.type = 'text';
+    field.value = typed;
+    field.placeholder = 'Filme ou série, ex.: La Casa de Papel';
+    field.setAttribute('autocomplete', 'off');
+    field.setAttribute('spellcheck', 'false');
+    hover(field.parentNode, Z.SEARCH, 0);
+    var chips = el('div', 'chips', head), labels = chipLabels(), active = [srKind > 0, srMine, srGenre > 0];
+    for (var c = 0; c < labels.length; c++) hover(el('div', 'chip' + (active[c] ? ' on' : ''), chips, labels[c]), Z.SEARCH, 1000 + c);
+    el('div', 'sstatus', head, srStatus);
+    el('div', 'phone', head, phoneHint);
+    if (phoneQr) drawQr(el('canvas', 'qr', head), phoneQr);
+    field.oninput = typedSoon;
+    el('div', 'sgrid', page);
+    renderResults();
+    if (inField) openField('searchpage');
+    updateFocus();
+  }
+
+  /** Only the results and the status: while typing, the field (and the TV's keyboard) stay as they are. */
+  function renderResults() {
+    var page = $('searchpage'), grid = page.querySelector('.sgrid'), status = page.querySelector('.sstatus');
+    if (!grid) return;
+    grid.innerHTML = '';
+    if (status) status.textContent = srStatus;
+    for (var i = 0; i < srShown.length; i++) {
+      var p = srShown[i], item = el('div', 'sitem', grid), app = p.app && Data.usable(p.app) && Data.appFor(p.app);
+      item.style.left = (90 + (i % SEARCH_COLS) * 296) + 'px';
+      item.style.top = (Math.floor(i / SEARCH_COLS) * SEARCH_ROW) + 'px';
+      var poster = el('div', 'poster', item);
+      poster.style.backgroundImage = 'url("' + Data.image(p.poster, 'w342') + '")';
+      appIcons(p, poster);
+      el('div', 'stitle', item, p.title);
+      var more = (p.apps || []).length - 1;
+      var where = app ? app.title + (more > 0 ? ' +' + more : '') : p.service ? p.service + ' (não instalado)' : p.paid ? '' : 'Sem streaming';
+      var meta = el('div', 'smeta' + (app ? ' mine' : ''), item, (p.year ? p.year + (where ? ' · ' : '') : '') + where);
+      if (!app && p.paid) el('span', 'paid', meta, p.paid);   // only to rent or buy: said at the line's right end
+      hover(item, Z.SEARCH, 2000 + i);
+      holdable(item);
+    }
+  }
+
+  // Results while typing: 3 letters and a short pause, so each key doesn't become a request.
+  var TYPE_PAUSE = 700, typeTimer = 0;
+
+  function typedSoon() {
+    clearTimeout(typeTimer);
+    typeTimer = setTimeout(function () {
+      var f = fieldOf('searchpage'), q = f ? f.value.replace(/^\s+|\s+$/g, '') : '';
+      if (st.zone === Z.SEARCH && q.length >= 3 && q !== srQuery) runSearch(true);
+    }, TYPE_PAUSE);
+  }
+
+  /** The phone page's QR code: dark modules on white, with the 4-module quiet zone the readers need. */
+  function drawQr(canvas, rows) {
+    var n = rows.length, cellPx = Math.floor(220 / (n + 8)), side = cellPx * (n + 8), g = canvas.getContext('2d');
+    canvas.width = canvas.height = side;
+    g.fillStyle = '#FFF';
+    g.fillRect(0, 0, side, side);
+    g.fillStyle = '#000';
+    for (var y = 0; y < n; y++) {
+      for (var x = 0; x < n; x++) if (rows[y].charAt(x) === '1') g.fillRect((x + 4) * cellPx, (y + 4) * cellPx, cellPx, cellPx);
+    }
+  }
+
+  function focusSearch() {
+    var page = $('searchpage'), on = st.zone === Z.SEARCH, f = page && page.querySelector('.sfield');
+    if (!f) return;
+    setClass(f, 'focus', on && srPart === 0);
+    var chips = page.querySelectorAll('.chip'), items = page.querySelectorAll('.sitem'), i;
+    for (i = 0; i < chips.length; i++) setClass(chips[i], 'focus', on && srPart === 1 && srChip === i);
+    for (i = 0; i < items.length; i++) setClass(items[i], 'focus', on && srPart === 2 && srItem === i);
+    var shift = srPart === 2 ? Math.floor(srItem / SEARCH_COLS) * SEARCH_ROW : 0, grid = page.querySelector('.sgrid');
+    grid.style.webkitTransform = grid.style.transform = 'translateY(' + (-shift) + 'px)';
+  }
+
+  function openSearch() {
+    st.zone = Z.SEARCH;
+    srPart = 0;
+    srAll = Prefs.get('recent', []);   // before typing: the titles opened lately, to pick up where it stopped
+    srQuery = '';
+    srKind = 0;
+    srMine = false;
+    srGenre = 0;
+    srFilter();
+    srStatus = srAll.length ? 'Abertos recentemente · digite ou escolha um gênero' : '';
+    if (!Data.hasKey()) srStatus = 'A pesquisa usa a chave do TMDB: configure em Configurações da Home.';
+    renderSearch();
+    setClass($('searchpage'), 'open', true);
+    openField('searchpage');
+    startPhone();
+  }
+
+  // Typing from the phone: the service serves a small page on the home network while the search is open.
+  var phoneTimer = 0, phoneHint = '', phoneQr = null;
+
+  function startPhone() {
+    TV.service('phone', {action: 'start'}, function (res) {
+      if (!res || !res.url || st.zone !== Z.SEARCH) return;
+      phoneHint = 'Aponte a câmera do celular (vale 2 min)  ·  ou abra ' + res.url.replace('http://', '') + ', código ' + res.code;
+      phoneQr = res.qr || null;
+      renderSearch();
+      clearInterval(phoneTimer);
+      phoneTimer = setInterval(function () {
+        TV.service('phone', {action: 'poll'}, function (r) {
+          if (!r || !r.text || st.zone !== Z.SEARCH) return;
+          var f = fieldOf('searchpage');
+          if (f) f.value = r.text;
+          runSearch();
+        });
+      }, 2000);
+    });
+  }
+
+  function stopPhone() {
+    clearInterval(phoneTimer);
+    phoneHint = '';
+    phoneQr = null;
+    TV.service('phone', {action: 'stop'});
+  }
+
+  function closeSearch() {
+    stopPhone();
+    closeField('searchpage');
+    setClass($('searchpage'), 'open', false);
+    $('searchpage').innerHTML = '';   // up to 15 decoded posters stay in RAM otherwise
+    srShown = [];
+    srAll = [];
+    st.zone = Z.TOP;
+    st.top = NTABS + 1;
+    updateFocus();
+  }
+
+  /** live: from typing, so the keyboard stays and only the results change. */
+  function runSearch(live) {
+    var f = fieldOf('searchpage'), q = f ? f.value.replace(/^\s+|\s+$/g, '') : '';
+    if (!live) closeField('searchpage');
+    if (q.length < 2) { srStatus = 'Digite pelo menos 2 letras.'; renderSearch(); return; }
+    srQuery = q;
+    srStatus = 'Procurando “' + q + '”…';
+    if (live) renderResults(); else { srAll = []; srShown = []; renderSearch(); }
+    Data.search(q, function (err, found) {
+      if (st.zone !== Z.SEARCH) return;
+      srAll = found || [];
+      srGenre = 0;
+      srItem = 0;
+      srFilter();
+      srStatus = err ? 'Não deu para pesquisar agora. Confira a internet.'
+        : (srAll[0] && srAll[0].person ? 'Com ' + srAll[0].person + ' · ' : '') + srCount();
+      if (live && typingIn('searchpage')) { renderResults(); return; }
+      srPart = srShown.length ? 2 : 0;
+      renderSearch();
+    });
+  }
+
+  /** A line in the TV service's notes (errors, what was opened), for finding what failed on the TV itself. */
+  function note(text) { TV.service('notes', {text: text}); }
+
+  window.onerror = function (msg, src, line) { note('erro: ' + msg + ' @' + String(src).split('/').pop() + ':' + line); };
+
+  function activateSearch() {
+    note('pesquisa OK parte=' + srPart + ' item=' + srItem + ' de ' + srShown.length);
+    if (srPart === 0) { openField('searchpage'); return; }
+    if (srPart === 1) {
+      if (browsing() && (srChip === 2 || (srChip === 0 && srGenre))) {
+        if (srChip === 2) srGenre = (srGenre + 1) % Data.GENRES.length;
+        else srKind = (srKind + 1) % 3;
+        browseGenre();
+        return;
+      }
+      if (srChip === 0) srKind = (srKind + 1) % 3;
+      else if (srChip === 1) srMine = !srMine;
+      else srGenre = (srGenre + 1) % (srGenres().length + 1);
+      srFilter();
+      if (srAll.length) srStatus = srCount();
+      renderSearch();
+      return;
+    }
+    if (srShown[srItem]) openDetail(srShown[srItem]);
+  }
+
+  function moveSearch(dx, dy) {
+    if (srPart === 0) {
+      if (dy > 0) srPart = 1;
+    } else if (srPart === 1) {
+      if (dx) srChip = Math.max(0, Math.min(2, srChip + dx));
+      else if (dy < 0) srPart = 0;
+      else if (dy > 0 && srShown.length) { srPart = 2; srItem = Math.min(srChip * 2, srShown.length - 1); }
+    } else {
+      var n = srItem + dx + dy * SEARCH_COLS;
+      if (dy < 0 && srItem < SEARCH_COLS) srPart = 1;
+      else if (n >= 0 && n < srShown.length && (dx === 0 || Math.floor(n / SEARCH_COLS) === Math.floor(srItem / SEARCH_COLS))) srItem = n;
+    }
+  }
+
+  // MARK: - Memory: while another app is in front, the picks' decoded photos go, so that app gets the RAM.
+
+  var hiddenPhotos = [];
+
+  function releaseImages() {
+    var list = document.querySelectorAll('#cards .layer, #saver .photo');
+    for (var i = 0; i < list.length; i++) {
+      var url = list[i].style.backgroundImage;
+      if (!url || url === 'none') continue;
+      hiddenPhotos.push([list[i], url]);
+      list[i].style.backgroundImage = 'none';
+    }
+  }
+
+  function restoreImages() {
+    for (var i = 0; i < hiddenPhotos.length; i++) hiddenPhotos[i][0].style.backgroundImage = hiddenPhotos[i][1];
+    hiddenPhotos = [];
+  }
+
   // MARK: - Drawer
 
   var drawerItems = [], drawerInputs = 0;
@@ -592,10 +1788,14 @@
     drawerItems = [];
     for (var i = 0; i < inputs.length; i++) {
       var x = inputs[i];
+      if (x.key !== 'live' && !x.connected) continue;   // a port with nothing plugged in is only in the way
       drawerItems.push({label: x.label || tr('Live TV'), symbol: x.symbol, off: !x.connected, run: launcher(x.id, x.label)});
     }
     drawerInputs = drawerItems.length;
     drawerItems.push({label: tr('All Apps'), symbol: 'apps', run: openApps});
+    var store = storeApp();
+    if (store) drawerItems.push({label: 'Loja LG', symbol: 'store', run: launcher(store.id, store.title)});
+    drawerItems.push({label: 'Adicionar app', symbol: 'icons/sym-add.svg', run: function () { openShelfEdit(Z.DRAWER); }});
     drawerItems.push({label: tr('Home Settings'), symbol: 'settings', run: openSettings});
     if (TV.canOpenSettings) drawerItems.push({label: tr('TV Settings'), symbol: 'tv_settings', run: tvSettings});
     var n = drawerItems.length, gap = 18, groupGap = 56, groups = drawerInputs > 0 && drawerInputs < n ? 2 : 1;
@@ -629,8 +1829,15 @@
       var w = el('div', 'panel glass', d);
       w.id = 'weather';
       w.style.left = '80px';
-      w.style.width = ((qt ? split - 16 : 1840) - 80) + 'px';
+      w.style.width = (split - 16 - 80) + 'px';   // the right side: crypto prices or the TV's performance
       renderWeather(w);
+    }
+    if (!qt && TV.stats && Prefs.get('showPerf', true)) {
+      var pf = el('div', 'panel glass', d), at = wx ? split + 16 : 80;
+      pf.id = 'perf';
+      pf.style.left = at + 'px';
+      pf.style.width = (1840 - at) + 'px';
+      renderPerf(pf);
     }
     if (qt) {
       var q = el('div', 'panel glass', d);
@@ -748,7 +1955,7 @@
   function settingRows() {
     var unit = Prefs.temperature(), theme = Prefs.theme();
     var auto = tr('Automatic'), picked = pickedLanguage();
-    var rows = [
+    var rows = profileRows().concat([
       {label: tr('Language'), value: picked === 'auto' ? auto : I18N.languageName(picked), opens: true, language: true,
         step: function (d) { if (d >= 0) openLanguages(); }},
       {label: tr('Temperature'), value: unit === 'C' ? '°C' : unit === 'F' ? '°F' : tr('unit|Automatic'),
@@ -760,9 +1967,43 @@
       {label: tr('Screensaver'), value: saverMode() === 'clock' ? tr('Clock') : tr('Photos'),
         step: function (d) { cycle('saver', ['photos', 'clock'], saverMode(), d); }},
       {label: tr('Picks per tab'), value: String(Prefs.cards()),
-        step: function (d) { Prefs.set('cards', 3 + (Prefs.cards() - 3 + (d || 1) + 4) % 4); renderCards(); }},
+        step: function (d) { Prefs.set('cards', 8 + (Prefs.cards() - 8 + 2 * (d || 1) + 8) % 8); renderCards(); }},
       {label: tr('Cartoons and anime'), toggle: !Prefs.hideAnimation(),
         step: function () { Prefs.set('hideAnimation', !Prefs.hideAnimation()); Data.refresh(); }},
+      {label: 'Times', value: followed().map(function (t) { return t.name; }).join(', ') || 'nenhum', opens: true,
+        step: function (d) { if (d >= 0) openTeams(); }},
+      {label: 'Ajuda: onde fica cada coisa', value: '›', opens: true, step: function (d) { if (d >= 0) openHelp(); }},
+      {label: 'Topo: jogos dos meus times', toggle: showsInfo('infoGames'),
+        step: function () { Prefs.set('infoGames', !showsInfo('infoGames')); applyExtras(); }},
+      {label: 'Topo: Fórmula 1', toggle: showsInfo('infoF1'),
+        step: function () { Prefs.set('infoF1', !showsInfo('infoF1')); applyExtras(); }},
+      {label: 'Topo: manchetes', toggle: showsInfo('infoNews'),
+        step: function () { Prefs.set('infoNews', !showsInfo('infoNews')); applyExtras(); }},
+      {label: 'Painel de desempenho', toggle: Prefs.get('showPerf', true),
+        step: function () { Prefs.set('showPerf', !Prefs.get('showPerf', true)); renderPanels(); }},
+      {label: 'Controle pelo celular', toggle: Prefs.get('phoneRemote', true),
+        step: function () {
+          Prefs.set('phoneRemote', !Prefs.get('phoneRemote', true));
+          TV.service('phone', {action: 'remote', on: Prefs.get('phoneRemote', true)});
+        }},
+      {label: 'Esquecer celulares pareados', value: '›', step: function (d) {
+        if (d < 0) return;
+        TV.service('phone', {action: 'forget'}, function (res) { toast(res ? 'Nenhum celular pareado agora.' : 'Não deu para esquecer.'); });
+      }},
+      {label: 'Voltar ao Free My TV', toggle: Prefs.get('backHome', true),
+        step: function () { Prefs.set('backHome', !Prefs.get('backHome', true)); TV.service('backHome', {on: Prefs.get('backHome', true)}); }},
+      {label: 'Ordem dos apps', value: Prefs.get('shelfOrder', 'manual') === 'usage' ? 'Mais usados' : 'Manual',
+        step: function () {
+          Prefs.set('shelfOrder', Prefs.get('shelfOrder', 'manual') === 'usage' ? 'manual' : 'usage');
+          pickShelf();
+          renderShelf();
+        }},
+      {label: 'Destaque girando', toggle: Prefs.get('rotate', true),
+        step: function () { Prefs.set('rotate', !Prefs.get('rotate', true)); }},
+      {label: 'Fundo', value: backgroundName(),
+        step: function (d) { cycle('bg', BACKGROUNDS.map(function (b) { return b[0]; }), Prefs.get('bg', 'stars'), d); drawStars(); }},
+      {label: 'Constelação em movimento', toggle: Prefs.get('starsMove', true), dim: Prefs.get('bg', 'stars') !== 'stars',
+        step: function () { Prefs.set('starsMove', !Prefs.get('starsMove', true)); drawStars(); }},
       {label: tr('Watch from the screensaver'), toggle: Prefs.saverWatch(),
         step: function () { Prefs.set('saverWatch', !Prefs.saverWatch()); }},
       {label: tr('Weather widget'), toggle: Prefs.weather(),
@@ -773,7 +2014,7 @@
         step: function (d) { cycle('forecast', ['hours', 'days'], Prefs.forecast(), d); renderPanels(); }},
       {label: tr('Quotes widget'), toggle: Prefs.quotes(),
         step: function () { Prefs.set('quotes', !Prefs.quotes()); Data.settingsChanged(); }}
-    ];
+    ]);
     var names = ['Bitcoin', 'Ethereum', 'Solana', tr('Dollar')];
     var count = Data.currency === 'BRL' ? 4 : 3;
     for (var i = 0; i < count; i++) {
@@ -805,7 +2046,38 @@
     rows.push({label: tr('Shelf'), value: '›', shelf: true, step: function (d) { if (d >= 0) openShelfEdit(); }});
     rows.push({label: tr('About this TV'), value: '›', about: true, step: function (d) { if (d >= 0) openAbout(); }});
     if (TV.canOpenSettings) rows.push({label: tr('TV Settings'), value: '›', step: function (d) { if (d >= 0) tvSettings(); }});
-    return rows;
+    return inSections(rows, sv);
+  }
+
+  // Home Settings in named groups, so each option is found by what it changes; the order inside a group is kept.
+  function inSections(rows, services) {
+    var groups = [
+      ['Perfil', ['Perfil', 'Nome do perfil', 'Cor de destaque', 'Fundo', 'Constelação em movimento', tr('Theme'),
+        'Modo infantil', 'Novo perfil', 'Excluir este perfil']],
+      ['Tela inicial', ['Topo: jogos dos meus times', 'Topo: Fórmula 1', 'Topo: manchetes', 'Times', tr('Shelf'),
+        'Ordem dos apps', 'Destaque girando', tr('Picks per tab'), tr('Cartoons and anime'), 'Painel de desempenho',
+        tr('Weather widget'), tr('City'), tr('Forecast')]],
+      ['Tela de descanso', [tr('Screensaver'), tr('Watch from the screensaver'), tr('Dim')]],
+      ['Filmes e séries', [tr('Picks from'), tr('Open picks in'), tr('TMDB key')]],
+      ['Celular e TV', ['Controle pelo celular', 'Esquecer celulares pareados', 'Voltar ao Free My TV', tr('Language'),
+        tr('Temperature'), tr('About this TV'), tr('TV Settings')]],
+      ['Ajuda', ['Ajuda: onde fica cada coisa']],
+      ['Cotações', [tr('Quotes widget')]]
+    ];
+    var serviceNames = (services || []).map(function (s) { return s.name; }), out = [], g, i;
+    function place(r) {
+      if (/^Confirmar: excluir/.test(r.label)) return 0;
+      for (var k = 0; k < groups.length; k++) if (groups[k][1].indexOf(r.label) >= 0) return k;
+      return serviceNames.indexOf(r.label) >= 0 ? 3 : groups.length - 1;   // services follow "Picks from"; coins
+    }
+    for (g = 0; g < groups.length; g++) {
+      for (i = 0; i < rows.length; i++) {
+        if (place(rows[i]) !== g) continue;
+        rows[i].sec = groups[g][0];
+        out.push(rows[i]);
+      }
+    }
+    return out;
   }
 
   function cycle(name, values, current, d) {
@@ -825,7 +2097,9 @@
     rowsNow = settingRows();
     list.style.height = Math.min(rowsNow.length, 7) * 78 + 'px';
     for (var i = 0; i < rowsNow.length; i++) {
-      var r = rowsNow[i], row = el('div', 'row' + (r.dim ? ' dim' : ''), holder, r.label);
+      var r = rowsNow[i];
+      if (r.sec && (!i || rowsNow[i - 1].sec !== r.sec)) el('div', 'sechead', holder, r.sec);
+      var row = el('div', 'row' + (r.dim ? ' dim' : ''), holder, r.label);
       if (r.toggle !== undefined) setClass(el('div', 'toggle', row), 'on', r.toggle);
       else {
         var v = el('span', 'value', row);
@@ -1213,7 +2487,10 @@
     updateFocus();
   }
 
-  function openShelfEdit() {
+  var editFrom = null;
+
+  function openShelfEdit(from) {
+    editFrom = from === Z.DRAWER ? Z.DRAWER : null;   // Back returns where it was opened
     setClass($('settings'), 'open', false);
     st.zone = Z.EDIT;
     st.edit = 0;
@@ -1243,6 +2520,119 @@
     renderShelfEdit();
   }
 
+  // MARK: - Moving an app on the shelf: hold OK on it, ← → moves it, OK or Back puts it down (saved as the shelf order)
+
+  // The press can come as keys (arrows mode) or as the Magic Remote's click (pointer mode), sometimes both at once:
+  // pressStart/pressEnd are idempotent, and a held key's repeats never count as new presses.
+  var HOLD_MS = 600, holdTimer = 0, moving = false, okReleased = true, pressAt = 0;
+
+  function pressStart() {
+    if (Date.now() - pressAt < 150) return;   // the same press, seen as both a key and a click
+    pressAt = Date.now();
+    if (moving) { if (okReleased) stopMoving(); return; }
+    if (!holdable_zone() || holdTimer) return;
+    okReleased = false;
+    holdTimer = setTimeout(function () { holdTimer = 0; if (st.zone === Z.SHELF) startMoving(); else playTrailer(); }, HOLD_MS);
+  }
+
+  function pressEnd() {
+    okReleased = true;
+    if (!holdTimer) return;
+    clearTimeout(holdTimer);
+    holdTimer = 0;
+    activate();   // a short press opens the app
+  }
+
+  function startMoving() {
+    if (st.zone !== Z.SHELF || !shelf[st.shelf]) return;
+    if (Prefs.get('shelfOrder', 'manual') === 'usage') { Prefs.set('shelfOrder', 'manual'); toast('Ordem dos apps: manual.'); }
+    moving = true;
+    setClass($('tiles').children[st.shelf], 'moving', true);
+    $('tilename').textContent = '← mover →';
+  }
+
+  function moveApp(dx) {
+    var to = Math.max(0, Math.min(shelf.length - 1, st.shelf + dx));
+    if (to === st.shelf) return;
+    var app = shelf.splice(st.shelf, 1)[0];
+    shelf.splice(to, 0, app);
+    st.shelf = to;
+    Prefs.set('shelf', shelf.map(function (a) { return a.id; }));
+    renderShelf();
+    setClass($('tiles').children[st.shelf], 'moving', true);
+    updateFocus();
+    $('tilename').textContent = '← mover →';
+  }
+
+  function stopMoving() {
+    moving = false;
+    renderShelf();
+    updateFocus();
+    toast('Ordem dos apps salva.');
+  }
+
+  /** True when the key was handled here: OK on the shelf waits for its release (a hold starts moving). */
+  var okDown = false;
+
+  function shelfKeys(k, repeat) {
+    if (k === TV.keys.ok) { repeat = repeat || okDown; okDown = true; }
+    if (moving) {
+      if (k === TV.keys.left) moveApp(-1);
+      else if (k === TV.keys.right) moveApp(1);
+      else if (k === TV.keys.back || k === 27 || k === 8) stopMoving();
+      else if (k === TV.keys.ok && !repeat) pressStart();
+      return true;
+    }
+    if (k !== TV.keys.ok || !holdable_zone()) return false;
+    if (!repeat) pressStart();
+    return true;
+  }
+
+  document.addEventListener('keyup', function (e) {
+    if (e.keyCode !== TV.keys.ok) return;
+    okDown = false;
+    pressEnd();
+  });
+
+  /** Where holding OK does something: the shelf (move the app), a pick or a search result (its trailer). */
+  function holdable_zone() {
+    return st.zone === Z.SHELF || st.zone === Z.CARDS || (st.zone === Z.SEARCH && srPart === 2);
+  }
+
+  /** The focused title's trailer on YouTube (the TV's app may ask once whether to play it). */
+  function playTrailer() {
+    playTrailerOf(st.zone === Z.CARDS ? cards[st.card] : srShown[srItem]);
+  }
+
+  function playTrailerOf(p) {
+    var yt = youtubeApp();
+    if (!p) return;
+    if (!yt) { toast('O YouTube não está instalado nesta TV.'); return; }
+    toast('Procurando o trailer de “' + p.title + '”…');
+    Data.trailer(p, function (key) {
+      if (!key) { toast('Não achei trailer de “' + p.title + '”.'); return; }
+      launcher(yt.id, yt.title, {contentTarget: 'v=' + key})();
+    });
+  }
+
+  function storeApp() {
+    for (var i = 0; i < apps.length; i++) if (apps[i].id === 'com.webos.app.discovery') return apps[i];
+    return null;
+  }
+
+  function youtubeApp() {
+    for (var i = 0; i < apps.length; i++) if (/youtube\.leanback/.test(apps[i].id)) return apps[i];
+    return null;
+  }
+
+  /** A shelf tile under the pointer: press and hold moves it, a short click opens it. */
+  function holdable(tile) {
+    tile.onclick = null;
+    tile.onmousedown = function () { tile.onmouseover(); pressStart(); };
+  }
+
+  document.addEventListener('mouseup', pressEnd);   // released off the tile (a shaky pointer) still ends the press
+
   // MARK: - Opening things
 
   /** Nuvio, when the TV has it: picks can open on its page there (Home Settings, Open picks in). LG only for now:
@@ -1265,9 +2655,87 @@
   function launcher(id, name, params) {
     return function () {
       TV.launch(id, params || null, function (ok) {
+        note('launch ' + id + ' -> ' + (ok ? 'ok' : 'falhou'));
         if (!ok) toast(trf("Couldn't open {app}.", {app: name || id}));
+        else countLaunch(id);
       });
     };
+  }
+
+  // MARK: - Most used apps and recently opened titles
+
+  var RECENT_MAX = 12, MYLIST_MAX = 30;
+
+  /** What My list and the recent titles keep of a title: enough to draw its card and open it. */
+  function keptTitle(p) {
+    return {id: p.id, kind: p.kind, title: p.title, poster: p.poster, backdrop: p.backdrop, app: p.app, apps: p.apps,
+      service: p.service, meta: p.meta, year: p.year || '', genres: p.genres || []};
+  }
+
+  function countLaunch(id) {
+    var usage = Prefs.get('usage', {}), copy = {};
+    for (var k in usage) if (usage.hasOwnProperty(k)) copy[k] = usage[k];
+    copy[id] = (copy[id] || 0) + 1;
+    Prefs.set('usage', copy);
+  }
+
+  /** Stable sort by launches, most first (Home Settings, Order of apps: Most used). */
+  function byUsage(list) {
+    var usage = Prefs.get('usage', {});
+    return list.map(function (a, i) { return [a, i]; }).sort(function (x, y) {
+      return ((usage[y[0].id] || 0) - (usage[x[0].id] || 0)) || x[1] - y[1];
+    }).map(function (x) { return x[0]; });
+  }
+
+  var DAYS = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+
+  /** "Novo episódio" or "T2E5 · sexta": what a series in My list has this week. */
+  function episodeText(n) {
+    var ep = 'T' + n.season + 'E' + n.episode;
+    return n.state === 'new' ? 'Novo episódio · ' + ep : ep + ' · ' + DAYS[new Date(n.at).getDay()];
+  }
+
+  function episodeBadge(p, holder) {
+    Data.episodes(p, function (n) {
+      if (!n || !holder.parentNode) return;
+      el('div', 'epbadge' + (n.state === 'new' ? ' fresh' : ''), holder, episodeText(n));
+    });
+  }
+
+  /** Saved titles first, then the ones opened lately, without repeats: the My list tab. */
+  function myList() {
+    var out = [], seen = {}, all = Prefs.get('mylist', []).concat(Prefs.get('recent', []));
+    for (var i = 0; i < all.length; i++) {
+      var k = all[i].kind + ':' + all[i].id;
+      if (seen[k] || !all[i].backdrop) continue;
+      seen[k] = true;
+      out.push(all[i]);
+    }
+    return out;
+  }
+
+  /** In the My list tab: saved, or opened lately (both show there, so both can be taken out). */
+  function inMyList(p) {
+    var list = Prefs.get('mylist', []).concat(Prefs.get('recent', []));
+    for (var i = 0; i < list.length; i++) if (list[i].id === p.id && list[i].kind === p.kind) return true;
+    return false;
+  }
+
+  function toggleMyList(p) {
+    function other(x) { return !(x.id === p.id && x.kind === p.kind); }
+    var adding = !inMyList(p), keep = Prefs.get('mylist', []).filter(other);
+    if (adding) keep.unshift(keptTitle(p));
+    else Prefs.set('recent', Prefs.get('recent', []).filter(other));
+    Prefs.set('mylist', keep.slice(0, MYLIST_MAX));
+    toast(adding ? p.title + ' entrou na Minha lista.' : p.title + ' saiu da Minha lista.');
+    if (TAB_KIND[st.tab] === 'mine') { cards = []; renderCards(); }
+  }
+
+  function rememberTitle(p) {
+    var item = keptTitle(p);
+    var list = Prefs.get('recent', []).filter(function (r) { return !(r.id === p.id && r.kind === p.kind); });
+    list.unshift(item);
+    Prefs.set('recent', list.slice(0, RECENT_MAX));
   }
 
   function tvSettings() {
@@ -1284,14 +2752,18 @@
   function activate() {
     switch (st.zone) {
       case Z.TOP:
-        if (st.top < 3) return;
-        if (st.top === 3) { var live = liveTV(); if (live) launcher(live.id, tr('Live TV'))(); }
-        else if (st.top === 4) { st.zone = Z.SHELF; openDrawer(); st.drawer = 1 < drawerInputs ? 1 : 0; updateFocus(); }
+        if (st.top < NTABS) return;
+        if (st.top === NTABS) TV.networkSettings(function (ok) { if (!ok) toast('Não deu para abrir a rede da TV.'); });
+        else if (st.top === NTABS + 1) openSearch();
+        else if (st.top === NTABS + 2) openControls();
         else openSettings();
         return;
       case Z.CARDS:
-        var target = pickTarget(cards[st.card]);
-        if (target) launcher(target.app.id, target.app.title, target.params)();
+        if (cards[st.card]) openDetail(cards[st.card]);
+        return;
+      case Z.GENRE:
+        applyGenre();
+        if (cards.length) { st.zone = Z.CARDS; st.card = 0; updateFocus(); }
         return;
       case Z.SHELF:
         if (shelf[st.shelf]) launcher(shelf[st.shelf].id, shelf[st.shelf].title)();
@@ -1320,6 +2792,24 @@
       case Z.ABOUT:
         closeAbout();
         return;
+      case Z.SEARCH:
+        activateSearch();
+        return;
+      case Z.TEAMS:
+        toggleTeam();
+        return;
+      case Z.CTRL:
+        controlRows()[ctrlRow].run(1);
+        return;
+      case Z.HELP:
+        closeHelp();
+        return;
+      case Z.DETAIL:
+        detailButtons()[dtButton].run();
+        return;
+      case Z.PAIR:
+        closePairing();
+        return;
     }
   }
 
@@ -1337,27 +2827,38 @@
   }
 
   function move(dx, dy) {
+    if (st.zone === Z.HELP) closeHelp();   // the guide never holds the arrows: they close it and move on
     var tiles = $('tiles').children, cardNodes = $('cards').children;
     switch (st.zone) {
       case Z.SHELF:
         if (dx) st.shelf = Math.max(0, Math.min(shelf.length - 1, st.shelf + dx));
-        else if (dy > 0) { openDrawer(); return; }
+        else if (dy > 0) { openDrawer(); return; }   // the next row: its header shows at the bottom of the screen
         else if (dy < 0) {
           if (cards.length) { st.zone = Z.CARDS; st.card = nearest(cardNodes, centerX(tiles[st.shelf])); }
-          else { st.zone = Z.TOP; st.top = Data.hasKey() ? st.tab : 3; }
+          else if (Data.hasKey()) { st.zone = Z.GENRE; genreAt = st.genre; }
+          else { st.zone = Z.TOP; st.top = NTABS + 1; }
         }
         break;
       case Z.CARDS:
         if (dx) st.card = Math.max(0, Math.min(cards.length - 1, st.card + dx));
-        else if (dy < 0) { st.zone = Z.TOP; st.top = st.tab; }
+        else if (dy < 0) { st.zone = Z.GENRE; genreAt = st.genre; }
         else if (shelf.length) { st.zone = Z.SHELF; st.shelf = nearest(tiles, centerX(cardNodes[st.card])); }
         break;
+      case Z.GENRE:
+        if (dx) { genreAt = Math.max(0, Math.min(Data.GENRES.length - 1, genreAt + dx)); genreSoon(); }
+        else if (dy < 0) { applyGenre(); st.zone = Z.TOP; st.top = st.tab; }
+        else { applyGenre(); if (cards.length) { st.zone = Z.CARDS; st.card = 0; } else if (shelf.length) st.zone = Z.SHELF; }
+        break;
       case Z.TOP:
-        if (dx) {
-          st.top = Math.max(Data.hasKey() ? 0 : 3, Math.min(5, st.top + dx));   // without the picks the tabs can't hold focus
-          if (st.top < 3) selectTab(st.top);   // as on Apple TV: focusing a tab selects it
-        } else if (dy > 0) {
-          if (cards.length) { st.zone = Z.CARDS; st.card = Math.min(cards.length - 1, st.top < 3 ? 0 : cards.length - 1); }
+        // Two rows: the menu above (network, search, controls, settings) and the tabs; ↑ ↓ moves between them,
+        // ← → stays in the row. Without the picks there are no tabs, only the menu.
+        var inMenu = st.top >= NTABS, tabs = Data.hasKey();
+        if (dx && inMenu) st.top = Math.max(NTABS, Math.min(NTABS + 3, st.top + dx));
+        else if (dx) { st.top = Math.max(0, Math.min(NTABS - 1, st.top + dx)); selectTab(st.top); }
+        else if (dy < 0 && !inMenu) { lastTab = st.top; st.top = NTABS + 1; }   // up to the menu, on Search
+        else if (dy > 0 && inMenu && tabs) st.top = lastTab;
+        else if (dy > 0) {
+          if (tabs) { st.zone = Z.GENRE; genreAt = st.genre; }
           else st.zone = Z.SHELF;
         }
         break;
@@ -1389,6 +2890,20 @@
       case Z.KEY:
         if (dy) st.key = Math.max(0, Math.min(keyRows() - 1, st.key + dy));
         break;
+      case Z.SEARCH:
+        moveSearch(dx, dy);
+        break;
+      case Z.DETAIL:
+        if (dx) dtButton = Math.max(0, Math.min(detailButtons().length - 1, dtButton + dx));
+        break;
+      case Z.CTRL:
+        if (dy) ctrlRow = Math.max(0, Math.min(controlRows().length - 1, ctrlRow + dy));
+        else if (dx && controlRows()[ctrlRow].step) controlRows()[ctrlRow].step(dx);
+        break;
+      case Z.TEAMS:
+        if (dy) tmRow = Math.max(0, Math.min(tmList.length - 1, tmRow + dy));
+        else if (dx) { tmLeague = (tmLeague + dx + LEAGUES.length) % LEAGUES.length; loadTeams(); }
+        break;
     }
     updateFocus();
   }
@@ -1396,6 +2911,7 @@
   function back() {
     if (st.zone === Z.EDIT) {
       setClass($('shelfedit'), 'open', false);
+      if (editFrom === Z.DRAWER) { st.zone = Z.DRAWER; updateFocus(); return; }
       openSettings();
       for (var i = 0; i < rowsNow.length; i++) if (rowsNow[i].shelf) st.row = i;   // back on the Shelf row, whatever follows it
       updateFocus();
@@ -1405,23 +2921,31 @@
     if (st.zone === Z.CITY) { closeCities(false); return; }
     if (st.zone === Z.KEY) { if (keyAsking) askRemoveKey(false); else closeKey(); return; }
     if (st.zone === Z.ABOUT) { closeAbout(); return; }
+    if (st.zone === Z.SEARCH) { closeSearch(); return; }
+    if (st.zone === Z.TEAMS) { closeTeams(); return; }
+    if (st.zone === Z.CTRL) { closeControls(); return; }
+    if (st.zone === Z.HELP) { closeHelp(); return; }
+    if (st.zone === Z.DETAIL) { closeDetail(); return; }
+    if (st.zone === Z.PAIR) { closePairing(); return; }
     if (sheetOpen()) { closeSheets(); return; }
     if (st.zone === Z.DRAWER) { closeDrawer(); return; }
     if (st.zone !== Z.SHELF && shelf.length) { st.zone = Z.SHELF; updateFocus(); return; }
-    TV.back();
+    // Back never leaves: LG's home would take over. The remote's Home button leaves.
+    if (st.shelf > 0) { st.shelf = 0; updateFocus(); }
   }
 
   /** The pointer focuses what it's over (the Magic Remote, or a mouse when previewing). */
   function hover(node, zone, index) {
     node.onmouseover = function () {
-      if (saverOn || (sheetOpen() !== (zone === Z.APPS || zone === Z.SETTINGS || zone === Z.EDIT || zone === Z.LANG || zone === Z.CITY || zone === Z.KEY || zone === Z.ABOUT))) return;
+      if (moving || saverOn || (sheetOpen() !== (zone === Z.APPS || zone === Z.SETTINGS || zone === Z.EDIT || zone === Z.LANG || zone === Z.CITY || zone === Z.KEY || zone === Z.ABOUT || zone === Z.SEARCH || zone === Z.TEAMS || zone === Z.CTRL || zone === Z.DETAIL))) return;
       if (zone === Z.DRAWER && st.zone !== Z.DRAWER) return;
       if (zone !== Z.DRAWER && st.zone === Z.DRAWER && zone !== Z.SHELF) return;
-      if (zone === Z.TOP && index < 3 && !Data.hasKey()) return;   // the tabs are hidden without the picks
+      if (zone === Z.TOP && index < NTABS && !Data.hasKey()) return;   // the tabs are hidden without the picks
       if (zone === Z.SHELF && st.zone === Z.DRAWER) closeDrawer();
       st.zone = zone;
-      if (zone === Z.TOP) { st.top = index; if (index < 3) selectTab(index); }
+      if (zone === Z.TOP) { st.top = index; if (index < NTABS) selectTab(index); }
       else if (zone === Z.CARDS) st.card = index;
+      else if (zone === Z.GENRE) { genreAt = index; genreSoon(); }
       else if (zone === Z.SHELF) st.shelf = index;
       else if (zone === Z.DRAWER) st.drawer = index;
       else if (zone === Z.APPS) st.grid = index;
@@ -1430,6 +2954,14 @@
       else if (zone === Z.LANG) st.lang = index;
       else if (zone === Z.CITY) st.city = index;
       else if (zone === Z.KEY) st.key = index;
+      else if (zone === Z.TEAMS) tmRow = index;
+      else if (zone === Z.CTRL) ctrlRow = index;
+      else if (zone === Z.DETAIL) dtButton = index;
+      else if (zone === Z.SEARCH) {
+        srPart = Math.floor(index / 1000);
+        if (srPart === 1) srChip = index % 1000;
+        if (srPart === 2) srItem = index % 1000;
+      }
       updateFocus();
     };
     node.onclick = function () { node.onmouseover(); activate(); };
@@ -1499,17 +3031,18 @@
     var clock = el('div', 'clock', s);
     el('div', 'time', clock);
     el('div', 'date', clock);
-    el('div', 'title', clock);
-    var hint = el('div', 'hint', clock);
+    var caption = el('div', 'caption', s), title = el('div', 'title', caption);
+    var hint = el('div', 'hint', caption);
     var front = a;
     function next() {
       if (!saverOn) return;
       var p = photos.length ? photos[saverIndex++ % photos.length] : null;
       var back = front === a ? b : a;
       if (p) {
-        back.style.backgroundImage = 'url(' + Data.image(p.backdrop, 'original') + ')';
+        // w1280: a 4K photo takes ~33 MB decoded, on a TV with ~150 MB free.
+        back.style.backgroundImage = 'url("' + Data.image(p.backdrop, 'w1280') + '")';
         back.style.webkitTransform = back.style.transform = 'scale(1.0)';
-        clock.children[2].textContent = p.title;
+        title.textContent = p.title;
         saverPick = p;
         // With Watch from the screensaver on, OK opens this title's app (any other key only closes).
         var target = Prefs.saverWatch() ? pickTarget(p) : null;
@@ -1596,6 +3129,7 @@
     var k = e.keyCode;
     if (poke(k === TV.keys.ok)) { e.preventDefault(); return; }   // the first press only wakes the screen (or OK watches)
     if (typing(k)) return;
+    if (shelfKeys(k, e.repeat)) { e.preventDefault(); return; }
     if (k === TV.keys.left) move(-1, 0);
     else if (k === TV.keys.right) move(1, 0);
     else if (k === TV.keys.up) move(0, -1);
@@ -1612,9 +3146,11 @@
    * its Cancel or ↑ ↓ leave the field. Samsung's keyboard sends Done as 65376 and Cancel as 65385. True: handled here.
    */
   function typing(k) {
-    var sheet = st.zone === Z.CITY ? 'citypick' : st.zone === Z.KEY ? 'keypick' : '';
+    var sheet = st.zone === Z.CITY ? 'citypick' : st.zone === Z.KEY ? 'keypick' : st.zone === Z.SEARCH ? 'searchpage' : '';
     if (!sheet || !typingIn(sheet)) return false;
-    if (k === TV.keys.ok || k === 65376) { if (st.zone === Z.CITY) searchCity(); else saveKey(); }
+    if (k === TV.keys.ok || k === 65376) {
+      if (st.zone === Z.CITY) searchCity(); else if (st.zone === Z.SEARCH) runSearch(); else saveKey();
+    }
     else if (k === TV.keys.back || k === 27 || k === 65385) { closeField(sheet); updateFocus(); }
     else if (k === TV.keys.up || k === TV.keys.down) { closeField(sheet); move(0, k === TV.keys.up ? -1 : 1); }
     return true;   // anything else types into the field
@@ -1646,6 +3182,8 @@
   function loadApps(done) {
     TV.apps(function (list) {
       apps = list.filter(function (a) { return !hidden(a); });
+      // LG's store calls itself just "Apps": named for what it does, it reads as the place to get new apps
+      for (var n = 0; n < apps.length; n++) if (apps[n].id === 'com.webos.app.discovery') apps[n].title = 'Loja LG';
       Data.setApps(apps);
       pickShelf();
       TV.inputs(function (list2) {
@@ -1659,6 +3197,13 @@
   function reset() {
     hideSaver();
     hideAmbient();
+    // Home (or opening the app again) lands on the home screen, whatever page was open
+    if ($('searchpage').className.indexOf('open') >= 0) closeSearch();
+    if ($('detail').className.indexOf('open') >= 0) closeDetail();
+    if ($('pairing').className.indexOf('open') >= 0) closePairing();
+    setClass($('help'), 'open', false);
+    setClass($('controls'), 'open', false);
+    setClass($('teampick'), 'open', false);
     closeSheets();
     st.zone = Z.SHELF;
     st.shelf = 0;
@@ -1694,8 +3239,10 @@
   document.addEventListener('webOSRelaunch', reopened);   // LG: opened again while running
   window.addEventListener('appcontrol', reopened);        // Samsung: the same
   document.addEventListener('visibilitychange', function () {
-    if (document.hidden) { hideSaver(); hideAmbient(); return; }
+    if (document.hidden) { hideSaver(); hideAmbient(); releaseImages(); if (st.zone === Z.SEARCH) closeSearch(); return; }
     idleAt = Date.now();
+    restoreImages();
+    okDown = false;   // a key held while another app took over never sends its keyup here
     loadApps(function () { renderShelf(); renderDrawer(); updateFocus(); Data.refresh(); });
   });
 
@@ -1707,6 +3254,21 @@
   renderTop();
   applyDim();
   tickClock();
+  applyAccent();
+  applyExtras();
+  restoreBackup();
+  Prefs.onSave(backupSoon);
+  // LG's home never stays: the service brings Free My TV back (Home Settings can turn it off).
+  TV.service('backHome', {on: Prefs.get('backHome', true)});
+  TV.service('phone', {action: 'remote', on: Prefs.get('phoneRemote', true)});
+  pollStats();   // the info slot's sources start in applyExtras(), above
+  setInterval(pollInfo, INFO_EVERY);
+  setInterval(rotateInfo, INFO_TURN);
+  setInterval(pollF1, 6 * 3600000);
+  setInterval(rotatePick, ROTATE_EVERY);
+  renewDevMode();
+  setInterval(renewDevMode, 6 * 3600000);   // the service renews only once a day; this keeps the days shown fresh
+  setInterval(pollStats, STATS_EVERY);
   loadApps(function () {
     renderAll();
     restInDrawer();
@@ -1725,5 +3287,6 @@
 
   // For the browser preview and tests.
   window.FreeMyTV = {state: st, move: move, activate: activate, back: back, showSaver: showSaver, hideSaver: hideSaver, toast: toast,
-    showAmbient: showAmbient, hideAmbient: hideAmbient, applyDim: applyDim};
+    showAmbient: showAmbient, hideAmbient: hideAmbient, applyDim: applyDim, showFootball: showFootball,
+    setInfo: function (h, r) { news = h; rates = r; showNews(); }, setF1: function (r) { f1Race = r; }};
 })();

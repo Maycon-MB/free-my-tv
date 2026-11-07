@@ -1,0 +1,647 @@
+/*
+ * Maycon's look over home.css, after the constanciodev.com.br portfolio: near-black base, one red accent, mono
+ * uppercase labels, hairline borders. Loaded after home.css; theme=dark in config.properties keeps .night on.
+ * Speed first: no box-shadows (each one is an extra layer to paint on the TV's GPU); only transform and opacity animate.
+ */
+@font-face {
+  font-family: 'Mono';
+  src: url('mono-500.woff2') format('woff2');
+  font-weight: 500;
+}
+@font-face {
+  font-family: 'Mono';
+  src: url('mono-700.woff2') format('woff2');
+  font-weight: 700;
+}
+
+body.night, .night #sky .night { background: #0B0B0D; }
+.night #sky .veil { background: rgba(11, 11, 13, 0.86); }
+#stage *, #stage *::after { box-shadow: none !important; }
+
+/* Constellation, drawn once by home.js at half size and scaled up. */
+#sky #stars { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; opacity: 1; }
+
+/* Top: title and tabs */
+.night #title { color: #F2F2F3; letter-spacing: -0.025em; font-weight: 800; }
+.night .tab { color: #8C8C96; }
+.night .tab.on { color: #F2F2F3; }
+.night .tab.focus { background: #E5484D; color: #FFF; }
+
+.night .round {
+  background: #141417;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #B4B4BC;
+}
+.night .round.focus { background: #E5484D; color: #FFF; border-color: #E5484D; }
+.round .tip, .row-title {
+  font-family: 'Mono', monospace;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 19px;
+}
+.night .round.focus .tip { color: #FF7A7F; }
+
+/* Picks */
+.night .card .img { background-color: #141417; }
+.card .img::after { box-shadow: none; border: 3px solid #E5484D; border-radius: 18px; background: none; }
+.night .card .meta { color: #8C8C96; }
+
+/* Clock, when there are no picks */
+.night #clock { color: #F2F2F3; font-weight: 300; }
+.night #clock .date {
+  font-family: 'Mono', monospace;
+  font-size: 30px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #FF7A7F;
+}
+
+/* CPU, RAM and network: mono chips at the top right, colored only when something is off. */
+#stats {
+  position: absolute;
+  right: 80px;
+  top: 176px;
+  height: 36px;
+  font-family: 'Mono', monospace;
+  font-size: 21px;
+  font-weight: 500;
+  line-height: 36px;
+  white-space: nowrap;
+  color: #B4B4BC;
+}
+#stats .stat {
+  display: inline-block;
+  margin-left: 14px;
+  padding: 0 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  background: #141417;
+}
+#stats b { font-weight: 700; color: #8C8C96; margin-right: 8px; letter-spacing: 0.08em; }
+#stats .warn { color: #FFB86B; border-color: rgba(255, 184, 107, 0.35); }
+#stats .alarm { color: #FF7A7F; border-color: rgba(229, 72, 77, 0.5); }
+#stats .dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 10px;
+  border-radius: 5px;
+  background: #3DD68C;
+  vertical-align: 1px;
+}
+#stats .alarm .dot { background: #E5484D; }
+
+/* Shelf: a flat surface; the focused tile grows a little (less upscaling) and gets the red edge. */
+.night #platter {
+  background: #141417;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.tile::after {
+  bottom: 0;
+  height: auto;
+  border: 3px solid #E5484D;
+  border-radius: 22px;
+  background: none;
+}
+.tile.focus { -webkit-transform: scale(1.12); transform: scale(1.12); }
+
+/* The focused app's name under the shelf (home.js places it under the tile). */
+#tilename {
+  position: absolute;
+  top: 1034px;
+  width: 600px;
+  text-align: center;
+  font-family: 'Mono', monospace;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: #FF7A7F;
+  opacity: 0;
+  -webkit-transition: opacity 0.15s;
+  transition: opacity 0.15s;
+}
+
+/* Screensaver: the clock alone at the bottom left; the title, larger, apart at the bottom right. */
+#saver .clock {
+  background: rgba(11, 11, 13, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+#saver .clock .date {
+  font-family: 'Mono', monospace;
+  font-size: 26px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #FF7A7F;
+}
+#saver .caption {
+  position: absolute;
+  right: 90px;
+  bottom: 100px;
+  max-width: 900px;
+  text-align: right;
+  color: #FFF;
+}
+#saver .caption .title {
+  font-size: 60px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.08;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#saver .caption .hint {
+  margin-top: 14px;
+  font-family: 'Mono', monospace;
+  font-size: 20px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* Search: field, filter chips and a poster grid that scrolls a row at a time. */
+#searchpage { background: #0B0B0D; overflow: hidden; }
+#searchpage .shead {
+  position: absolute;
+  left: 90px;
+  right: 90px;
+  top: 60px;
+  height: 300px;
+  z-index: 2;
+  background: #0B0B0D;
+}
+#searchpage .eyebrow {
+  font-family: 'Mono', monospace;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #FF7A7F;
+}
+#searchpage .sfield {
+  margin-top: 18px;
+  height: 84px;
+  border: 2px solid rgba(255, 255, 255, 0.16);
+  border-radius: 18px;
+  background: #141417;
+}
+#searchpage .sfield.focus { border-color: #E5484D; }
+#searchpage input {
+  width: 100%;
+  height: 80px;
+  padding: 0 30px;
+  box-sizing: border-box;
+  border: 0;
+  outline: none;
+  background: none;
+  font: 500 36px 'Inter', sans-serif;
+  color: #F2F2F3;
+}
+#searchpage .chips { margin-top: 22px; white-space: nowrap; }
+#searchpage .chip {
+  display: inline-block;
+  height: 56px;
+  margin-right: 14px;
+  padding: 0 28px;
+  border: 2px solid rgba(255, 255, 255, 0.16);
+  border-radius: 28px;
+  font-size: 25px;
+  font-weight: 600;
+  line-height: 52px;
+  color: #B4B4BC;
+}
+#searchpage .chip.on { color: #FF7A7F; border-color: rgba(229, 72, 77, 0.6); }
+#searchpage .chip.focus { background: #E5484D; border-color: #E5484D; color: #FFF; }
+#searchpage .sstatus {
+  margin-top: 16px;
+  font-family: 'Mono', monospace;
+  font-size: 20px;
+  letter-spacing: 0.06em;
+  color: #8C8C96;
+}
+#searchpage .sgrid {
+  position: absolute;
+  left: 0;
+  top: 380px;
+  width: 1920px;
+  -webkit-transition: -webkit-transform 0.25s;
+  transition: transform 0.25s;
+}
+#searchpage .sitem { position: absolute; width: 266px; height: 500px; }
+#searchpage .poster {
+  width: 266px;
+  height: 399px;
+  border: 3px solid transparent;
+  border-radius: 18px;
+  background: #141417 center / cover no-repeat;
+  -webkit-transition: -webkit-transform 0.18s;
+  transition: transform 0.18s;
+}
+#searchpage .sitem.focus .poster { border-color: #E5484D; -webkit-transform: scale(1.05); transform: scale(1.05); }
+#searchpage .stitle {
+  margin-top: 16px;
+  font-size: 25px;
+  font-weight: 700;
+  color: #F2F2F3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#searchpage .smeta {
+  margin-top: 6px;
+  font-family: 'Mono', monospace;
+  font-size: 17px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8C8C96;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#searchpage .smeta.mine { color: #3DD68C; }
+
+/* The service a pick streams on, in the card's top left corner. */
+.card .badge {
+  position: absolute;
+  left: 14px;
+  top: 14px;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 10px;
+  background: rgba(11, 11, 13, 0.82);
+  font-family: 'Mono', monospace;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 38px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #F2F2F3;
+  white-space: nowrap;
+}
+.card .badge img { height: 22px; max-width: 110px; vertical-align: -5px; }
+
+/* Top buttons: 76 px rings with vector symbols; focus fills them red and shows the name below. */
+#buttons .round { top: 64px; width: 76px; height: 76px; border-radius: 38px; }
+#buttons .round .sym { left: 20px; top: 20px; width: 36px; height: 36px; -webkit-mask-size: 36px 36px; }
+.night #buttons .round { background: #141417; border: 1.5px solid rgba(255, 255, 255, 0.14); color: #F2F2F3; }
+.night #buttons .round.focus { background: #E5484D; border-color: #E5484D; color: #FFF; }
+#buttons .round .tip { top: 96px; }
+
+/* Moving an app: the tile lifts with a dashed red edge while ← → carry it. */
+.tile.moving { -webkit-transform: scale(1.12) translateY(-14px); transform: scale(1.12) translateY(-14px); }
+.tile.moving::after { opacity: 1; border-style: dashed; border-color: #FF7A7F; }
+
+/* Drawer: the TV's performance beside the weather, as labeled bars. */
+.night .panel { background: #141417; border: 1px solid rgba(255, 255, 255, 0.08); }
+.panel .head { font-family: 'Mono', monospace; font-size: 20px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+.night .panel .head { color: #FF7A7F; }
+#perf .side { font-family: 'Mono', monospace; font-size: 17px; letter-spacing: 0.06em; text-transform: uppercase; color: #8C8C96; }
+#perf .prow { position: absolute; left: 34px; right: 34px; height: 44px; font-family: 'Mono', monospace; }
+#perf .pname { position: absolute; left: 0; top: 0; font-size: 20px; font-weight: 700; letter-spacing: 0.1em; color: #8C8C96; }
+#perf .pval { position: absolute; right: 0; top: 0; font-size: 21px; font-weight: 500; color: #F2F2F3; }
+#perf .pval.ok { color: #3DD68C; }
+#perf .pval.bad { color: #FF7A7F; }
+#perf .pbar { position: absolute; left: 0; right: 0; top: 32px; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+#perf .pfill { height: 6px; border-radius: 3px; background: #3DD68C; }
+#perf .pfill.warn { background: #FFB86B; }
+#perf .pfill.alarm { background: #E5484D; }
+
+/* The service badge is the app's own icon, as on the TV's launcher; the rare one without an icon shows its name. */
+.card .badge { width: 58px; height: 58px; padding: 0; border-radius: 14px; overflow: hidden; background: #0B0B0D; }
+.card .badge img { width: 58px; height: 58px; max-width: none; vertical-align: top; }
+.card .badge.netflix img { width: 30px; height: 46px; margin: 6px 14px; }
+.card .badge.word { width: auto; height: 38px; padding: 0 14px; border-radius: 10px; }
+
+/* Search: "Alugar" / "Comprar" at the right end of the meta line when no installed app streams it. */
+#searchpage .smeta { position: relative; padding-right: 0; }
+#searchpage .smeta .paid { position: absolute; right: 0; top: 0; color: #FFB86B; }
+
+/* Football: the followed team's match beside the tabs; live gets the red accent. */
+#football { position: absolute; left: 730px; top: 158px; height: 68px; white-space: nowrap; }
+#football .match {
+  display: inline-block;
+  height: 64px;
+  margin-right: 14px;
+  padding: 0 22px 0 16px;
+  border: 1.5px solid rgba(255, 255, 255, 0.12);
+  border-radius: 32px;
+  background: #141417;
+  line-height: 64px;
+  color: #F2F2F3;
+}
+#football img { width: 36px; height: 36px; vertical-align: -10px; margin: 0 8px; }
+#football .teams { font-size: 26px; font-weight: 800; letter-spacing: 0.02em; }
+#football .when {
+  margin-left: 14px;
+  font-family: 'Mono', monospace;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #8C8C96;
+}
+#football .live { border-color: #E5484D; }
+#football .live .when { color: #FF7A7F; }
+
+/* Light theme (a profile's choice): the dark chips and pages turn light. */
+body:not(.night) #stars { opacity: 0.35; }
+body:not(.night) #stats .stat, body:not(.night) #football .match, body:not(.night) #platter {
+  background: #FFF;
+  border-color: rgba(0, 0, 0, 0.1);
+  color: #1D1D1F;
+}
+body:not(.night) #searchpage, body:not(.night) #searchpage .shead { background: #F5F5F7; }
+body:not(.night) #searchpage input, body:not(.night) #searchpage .stitle { color: #1D1D1F; }
+body:not(.night) #searchpage .sfield, body:not(.night) #searchpage .chip { background: #FFF; border-color: rgba(0, 0, 0, 0.12); }
+body:not(.night) #buttons .round { background: #FFF; border: 1.5px solid rgba(0, 0, 0, 0.1); color: #1D1D1F; }
+
+#perf .side.bad { color: #FF7A7F; }   /* under 10 days of Developer Mode left */
+
+/* Headlines and exchange rates: one quiet line between the title and the top buttons. */
+#news {
+  position: absolute;
+  left: 640px;
+  top: 96px;
+  width: 840px;
+  height: 30px;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 21px;
+  line-height: 30px;
+  color: #8C8C96;
+}
+#news .src { font-family: 'Mono', monospace; font-weight: 700; font-size: 17px; letter-spacing: 0.1em; color: #FF7A7F; margin-right: 12px; }
+#news .title { display: inline-block; max-width: 560px; overflow: hidden; text-overflow: ellipsis; vertical-align: top; }
+#news .rates { position: absolute; right: 0; top: 0; padding-left: 16px; background: #0B0B0D; font-family: 'Mono', monospace; font-size: 17px; letter-spacing: 0.04em; }
+body:not(.night) #news .rates { background: #F5F5F7; }
+#football .f1 .teams { font-size: 22px; font-weight: 700; }
+#searchpage .phone { margin-top: 8px; font-family: 'Mono', monospace; font-size: 19px; letter-spacing: 0.04em; color: #3DD68C; }
+
+/* Drawer shortcuts: 13 keys share the row, so the name may take two smaller lines instead of being cut. */
+.key .sym { top: 24px; }
+.key .label { top: 68px; font-size: 19px; line-height: 22px; white-space: normal; text-align: center; max-height: 44px; }
+
+/* Team picker: the same box as the language picker. */
+#teampick .box {
+  position: absolute;
+  left: 560px;
+  top: 150px;
+  width: 800px;
+  border-radius: 40px;
+  padding: 30px 30px 26px;
+  box-sizing: border-box;
+  background: #141417;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* The phone page's QR code, at the search header's right; white around it so phones read it. */
+#searchpage .qr { position: absolute; right: 0; top: 0; width: 200px; height: 200px; border-radius: 14px; }
+#searchpage .sfield, #searchpage .chips, #searchpage .sstatus, #searchpage .phone { margin-right: 240px; }
+
+/* Controls sheet: the same box as the team picker. */
+#controls .box {
+  position: absolute;
+  left: 560px;
+  top: 150px;
+  width: 800px;
+  border-radius: 40px;
+  padding: 30px 30px 26px;
+  box-sizing: border-box;
+  background: #141417;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+#news { width: 470px; }
+#news .title { max-width: 300px; }
+#news .rates { display: none; }   /* no room beside the named buttons; fewer things at the top */
+
+/* Help sheet: label left, where it is right, in the same box as the other sheets. */
+#help .box {
+  position: absolute;
+  left: 360px;
+  top: 110px;
+  width: 1200px;
+  border-radius: 40px;
+  padding: 30px 30px 26px;
+  box-sizing: border-box;
+  background: #141417;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+#help .row .value { font-size: 24px; color: #B4B4BC; }
+
+
+/* Top: named buttons (icon + word) instead of icon-only circles. */
+#buttons .round.pill { border-radius: 38px; text-align: left; }
+#buttons .round.pill .sym { left: 24px; top: 20px; }
+#buttons .round.pill .plabel { position: absolute; left: 72px; top: 0; line-height: 76px; font-size: 26px; font-weight: 600; white-space: nowrap; }
+
+/* The next row's header at the bottom: what ▼ leads to is seen before pressing it. */
+#morehint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 1038px;
+  text-align: center;
+  font-family: 'Mono', monospace;
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #B4B4BC;
+}
+.drawer-open #morehint { opacity: 0; }
+
+/* A title's page: its photo, name, where it streams and named actions. */
+#detail { background: #0B0B0D; z-index: 4; }   /* opened from Search: above it, or Search takes the clicks */
+#detail .art { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; background-size: cover; background-position: center top; }
+#detail .shade { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px;
+  background: -webkit-linear-gradient(left, rgba(11, 11, 13, 0.95), rgba(11, 11, 13, 0.55) 55%, rgba(11, 11, 13, 0.1));
+  background: linear-gradient(90deg, rgba(11, 11, 13, 0.95), rgba(11, 11, 13, 0.55) 55%, rgba(11, 11, 13, 0.1)); }
+#detail .info { position: absolute; left: 110px; bottom: 140px; width: 1100px; }
+#detail .dtitle { font-size: 72px; font-weight: 800; letter-spacing: -0.025em; line-height: 1.05; color: #FFF; }
+#detail .dmeta { margin-top: 20px; font-size: 28px; color: #D4D4DA; }
+#detail .dbtns { margin-top: 44px; white-space: nowrap; }
+#detail .dbtn {
+  display: inline-block;
+  height: 76px;
+  margin-right: 18px;
+  padding: 0 40px;
+  border-radius: 38px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  background: rgba(20, 20, 23, 0.7);
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 72px;
+  color: #FFF;
+}
+#detail .dbtn.focus { background: #E5484D; border-color: #E5484D; }
+body:not(.night) #morehint { color: #6E6E73; }
+
+/* A profile without the extras: no headlines or sports at the top. */
+.no-extras #news, .no-extras #football { display: none; }
+
+/* Backgrounds per profile: the photo of the highlighted title shows through more; plain hides the canvas. */
+.bg-photo #sky #stars, .bg-plain #sky #stars { display: none; }
+.night.bg-photo #sky .veil { background: rgba(11, 11, 13, 0.62); }
+.night.bg-stars #sky canvas.on, .night.bg-glow #sky canvas.on, .night.bg-plain #sky canvas.on { opacity: 0; }
+#sky #stars { opacity: 1 !important; }
+
+/* Named top buttons sit side by side: the focused one fills with the accent but doesn't grow over its neighbor. */
+#buttons .round.pill.focus { -webkit-transform: none; transform: none; z-index: 2; }
+
+/* A series' news this week, on its card in My list and on its page. */
+.card .epbadge {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  height: 40px;
+  padding: 0 16px;
+  border-radius: 20px;
+  background: rgba(11, 11, 13, 0.85);
+  font-size: 21px;
+  font-weight: 700;
+  line-height: 40px;
+  color: #F2F2F3;
+  white-space: nowrap;
+}
+.card .epbadge.fresh { background: #E5484D; color: #FFF; }
+#detail .depisode { margin-top: 14px; font-size: 26px; font-weight: 700; color: #FF7A7F; }
+
+#detail .delse { margin-top: 10px; font-size: 24px; color: #8C8C96; }
+
+/* Search results: the icons of the apps that have the title, in the poster's top left corner. */
+#searchpage .poster { position: relative; }
+#searchpage .appicons { position: absolute; left: 10px; top: 10px; white-space: nowrap; }
+#searchpage .appicon {
+  display: inline-block;
+  width: 46px;
+  height: 46px;
+  margin-right: 6px;
+  border-radius: 11px;
+  overflow: hidden;
+  background: #0B0B0D;
+  text-align: center;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 46px;
+  color: #FFF;
+  vertical-align: top;
+}
+#searchpage .appicon img { width: 46px; height: 46px; vertical-align: top; }
+#searchpage .appicon.netflix img { width: 24px; height: 36px; margin: 5px 11px; }
+
+/* The network button turns red when the TV is offline, so it's seen from the couch. */
+.night #buttons .round.pill.offline { background: #3A1214; border-color: #E5484D; color: #FF7A7F; }
+/* With four named buttons at the top right, the headline goes to the tabs' row, right of the match. */
+#news { left: 1150px; top: 176px; width: 690px; text-align: right; }
+#news .title { max-width: 580px; }
+
+/* The network button is a round icon: green when connected, red when not, the accent when focused. */
+#buttons .round.pill:first-child { padding: 0; }
+#buttons .round.pill:first-child .sym { left: 20px; }
+#buttons .round.pill:first-child .plabel { display: none; }
+.night #buttons .round.pill.online { color: #3DD68C; }
+.night #buttons .round.pill.online.focus { color: #FFF; }
+
+/* Pairing a phone: a big QR code in the usual sheet box. */
+#pairing .box {
+  position: absolute;
+  left: 560px;
+  top: 110px;
+  width: 800px;
+  border-radius: 40px;
+  padding: 30px 30px 26px;
+  box-sizing: border-box;
+  background: #141417;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: center;
+}
+#pairing .qrbig { display: block; width: 440px; height: 440px; margin: 10px auto 18px; border-radius: 18px; }
+#pairing .hint { font-size: 24px; line-height: 1.4; color: #B4B4BC; }
+
+/* The info slot: its cards take turns, one shown (.on) at a time, fading in. */
+#football .match { display: none; opacity: 0; -webkit-transition: opacity 0.4s; transition: opacity 0.4s; }
+#football .match.on { display: inline-block; opacity: 1; }
+#football { max-width: 1110px; }
+#football .news { max-width: 400px; overflow: hidden; text-overflow: ellipsis; padding-left: 22px; }
+#football .news .src { font-size: 22px; font-weight: 800; color: #FF7A7F; margin-right: 12px; }
+#football .news .headline { font-size: 24px; font-weight: 500; color: #D4D4DA; }
+#football .when { text-transform: none; letter-spacing: 0.02em; }
+
+/* Words in Inter, sentence case: capitals spaced out read worse from the couch. Mono stays for numbers. */
+#tilename { font-family: 'Inter', sans-serif; text-transform: none; letter-spacing: 0; font-size: 26px; font-weight: 700; }
+#morehint { font-family: 'Inter', sans-serif; text-transform: none; letter-spacing: 0; font-size: 23px; font-weight: 600; }
+
+/* Home Settings' group titles: not focusable, they name what the rows below change. */
+.box .sechead { height: 48px; line-height: 56px; padding: 0 24px; font-family: 'Inter', sans-serif; font-size: 23px;
+  font-weight: 700; color: #FF7A7F; }
+.box .sechead:first-child { height: 40px; line-height: 40px; }
+
+/* The hint sits bottom left, out of the way of the focused app's name; it fades when the name reaches it. */
+#morehint { left: 80px; right: auto; text-align: left; -webkit-transition: opacity 0.15s; transition: opacity 0.15s; }
+#morehint.away { opacity: 0; }
+
+/* MARK: - Stage: the focused title in the middle of its row, its 16:9 photo whole in a 720x405 card with the
+   portfolio's stage edge (hairline, top lit red, one pulse when it changes); posters on each side, fading with
+   distance; its name and where it streams centered under it, on the plain background. */
+#hero { position: absolute; left: 0; top: 0; width: 1920px; height: 812px; }
+#hero::before {
+  content: ''; position: absolute; left: 360px; top: 250px; width: 1200px; height: 560px;
+  background: -webkit-radial-gradient(50% 35%, ellipse, rgba(229, 72, 77, 0.14), rgba(229, 72, 77, 0) 60%);
+  background: radial-gradient(ellipse at 50% 35%, rgba(229, 72, 77, 0.14), rgba(229, 72, 77, 0) 60%);
+}
+#football { max-width: 1110px; }
+#herotext { position: absolute; left: 160px; top: 728px; width: 1600px; text-align: center; font-family: 'Inter', sans-serif; }
+#herotext .htitle {
+  font-size: 40px; font-weight: 800; line-height: 46px; letter-spacing: -0.01em; color: #F5F5F7;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#herotext .hmeta { margin-top: 4px; height: 34px; line-height: 34px; font-size: 24px; font-weight: 600; color: #A1A1AA; white-space: nowrap; }
+#herotext .hwhere { margin-left: 18px; color: #F5F5F7; font-weight: 700; }
+#herotext .hwhere.off { color: #8C8C96; font-weight: 600; }
+#herotext .hwhere .badge {
+  position: relative; left: 0; top: 0; display: inline-block; vertical-align: -8px; margin-right: 10px;
+  width: 32px; height: 32px; padding: 0; border-radius: 8px; overflow: hidden;
+}
+#herotext .hwhere .badge img { width: 32px; height: 32px; }
+#herotext .hwhere .badge.netflix img { width: 18px; height: 28px; margin: 2px 7px; }
+#herotext .hwhere .badge.word { width: auto; padding: 0 8px; font-size: 13px; line-height: 32px; }
+#herotext .hwait { position: relative; top: -260px; font-size: 34px; font-weight: 600; color: #A1A1AA; }
+
+/* Genres under the tabs: as the tabs, the applied one is white, the focused one a red pill. */
+#genres { position: absolute; left: 62px; top: 240px; height: 52px; white-space: nowrap; font-family: 'Inter', sans-serif; }
+#genres .genre {
+  display: inline-block; height: 52px; line-height: 52px; padding: 0 20px; margin-right: 4px; border-radius: 26px;
+  font-size: 25px; font-weight: 600; color: #8C8C96;
+}
+#genres .genre.on { color: #F5F5F7; }
+.night #genres .genre.focus { background: #E5484D; color: #FFF; }
+
+/* The row around the stage: no sliding holder, each card placed by its distance to the focus. */
+.card { top: 382px; width: 180px; height: 270px; -webkit-transition: opacity 0.2s; transition: opacity 0.2s; }
+.card.side { opacity: 0.62; }
+.card.far { opacity: 0.32; }
+.card.off { display: none; }
+.card.stage { top: 312px; width: 720px; height: 405px; opacity: 1; }
+.card .img, .card .img::after { border-radius: 14px; }
+.card.stage .img, .card.stage .img::after { border-radius: 18px; }
+.card .back { opacity: 0; background-color: #141417; -webkit-transition: opacity 0.25s; transition: opacity 0.25s; }
+.card.stage .back.ready { opacity: 1; }
+.card.stage .layer { visibility: hidden; }
+.card.stage .layer.back { visibility: visible; }
+.card.stage .img { background-color: #141417; }
+.card.stage .img::before {
+  content: ''; position: absolute; left: 0; top: 0; right: 0; bottom: 0; z-index: 1; border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.12); border-top-color: rgba(255, 90, 95, 0.45);
+}
+.card.stage.pulsa .img::after { -webkit-animation: pulso-palco 0.7s ease-out; animation: pulso-palco 0.7s ease-out; }
+@-webkit-keyframes pulso-palco { 0% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes pulso-palco { 0% { opacity: 1; } 100% { opacity: 0; } }
+.card.focus { -webkit-transform: none; transform: none; }
+.card .badge { left: 8px; top: auto; bottom: 8px; width: 40px; height: 40px; border-radius: 10px; }
+.card .badge img { width: 40px; height: 40px; }
+.card .badge.netflix img { width: 22px; height: 34px; margin: 3px 9px; }
+.card .badge.word { width: auto; height: 30px; padding: 0 8px; font-size: 13px; line-height: 30px; }
+.card .epbadge { left: 6px; right: 6px; top: 6px; bottom: auto; height: 30px; padding: 0 8px; font-size: 15px; line-height: 30px; border-radius: 15px; overflow: hidden; text-overflow: ellipsis; }
+.card .pname { position: absolute; left: 10px; right: 10px; top: 14px; font-size: 20px; font-weight: 700; color: #F5F5F7; }

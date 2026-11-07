@@ -78,7 +78,7 @@ var TV = (function () {
   var SSAP_KEY = 'fmtv.ssapKey', SSAP_REFUSED = 'fmtv.ssapRefused';
 
   /** One call to the remote control API; done(result) with null on failure. */
-  function ssap(uri, done) {
+  function ssap(uri, done, params) {
     var ws = null, finished = false, key = null;
     var timer = setTimeout(function () { finish(null); }, 90000);   // time to answer the TV's prompt
     function finish(result) {
@@ -92,7 +92,8 @@ var TV = (function () {
     try { ws = new WebSocket('ws://127.0.0.1:3000'); } catch (e) { finish(null); return; }
     ws.onopen = function () {
       var payload = {forcePairing: false, pairingType: 'PROMPT',
-        manifest: {manifestVersion: 1, appVersion: '1.0', permissions: ['READ_INSTALLED_APPS']}};
+        manifest: {manifestVersion: 1, appVersion: '1.0', permissions: ['READ_INSTALLED_APPS', 'READ_RUNNING_APPS',
+          'READ_INPUT_DEVICE_LIST', 'CONTROL_INPUT_TV', 'CONTROL_AUDIO', 'CONTROL_POWER', 'WRITE_NOTIFICATION_TOAST']}};
       if (key) payload['client-key'] = key;
       ws.send(JSON.stringify({type: 'register', id: 'register', payload: payload}));
     };
@@ -102,7 +103,7 @@ var TV = (function () {
       if (!m) return;
       if (m.type === 'registered') {
         try { localStorage.setItem(SSAP_KEY, m.payload['client-key']); } catch (e) {}
-        ws.send(JSON.stringify({type: 'request', id: 'call', uri: 'ssap://' + uri}));
+        ws.send(JSON.stringify({type: 'request', id: 'call', uri: 'ssap://' + uri, payload: params || {}}));
       } else if (m.id === 'call' || m.type === 'error') {
         if (m.id === 'register' && m.type === 'error') {
           try { localStorage.setItem(SSAP_REFUSED, '1'); } catch (e) {}   // the person said no on the TV
@@ -117,7 +118,7 @@ var TV = (function () {
     function viaService() {
       clearTimeout(timer);
       timer = setTimeout(function () { finish(null); }, 100000);   // the service waits 90 s for the prompt
-      luna('luna://' + self + '.service/ssap', {uri: uri, clientKey: key}, function (res) {
+      luna('luna://' + self + '.service/ssap', {uri: uri, clientKey: key, params: params || {}}, function (res) {
         if (res && res.clientKey) {
           try { localStorage.setItem(SSAP_KEY, res.clientKey); } catch (e) {}
         }
@@ -138,8 +139,8 @@ var TV = (function () {
     {id: 'com.webos.app.hdmi4', key: 'hdmi4', label: 'HDMI 4', symbol: 'hdmi'}
   ];
 
-  // Not shown among LG's apps: the inputs above, LG's own home and launchers.
-  var HIDDEN = /^(com\.webos\.app\.(livetv|hdmi\d|home|homeconnect|discovery|launcher)|com\.webos\.app\.inputpicker)$/;
+  // Not shown among LG's apps: the inputs above, LG's own home and launchers (its store stays: new apps come from it).
+  var HIDDEN = /^(com\.webos\.app\.(livetv|hdmi\d|home|homeconnect|launcher)|com\.webos\.app\.inputpicker)$/;
 
   // Not shown among Samsung's apps: Smart Hub's own pieces, the platform's tools and players (but its browser,
   // Netflix and Prime Video, which live there too), services, keyboards and ad players. The rest is what Smart Hub shows.
@@ -510,10 +511,77 @@ var TV = (function () {
      */
     canOpenSettings: !tizen2 && !tizen34,
 
+    /**
+     * CPU (%), memory and network from the app's service on LG: done({cpu, mem: {usedMb, totalMb}, net: {kind, up,
+     * kbps}}), parts missing until a second reading; null elsewhere. The browser preview gets made-up numbers.
+     */
+    stats: function (done) {
+      if (!webos) {
+        if (samsung) { done(null); return; }
+        done({cpu: 18 + Math.round(Math.random() * 20), mem: {usedMb: 1080, totalMb: 1223, swapUsedMb: 470, swapTotalMb: 900},
+              net: {kind: 'wifi', up: true, signal: 72, kbps: Math.round(Math.random() * 4000)}});
+        return;
+      }
+      luna('luna://' + self + '.service/stats', {}, done);
+    },
+
+    /** The settings' backup file on the TV: save(text) or load; done({data}) or null (not on LG). */
+    backup: function (action, data, done) {
+      if (!webos) { if (done) done(null); return; }
+      luna('luna://' + self + '.service/backup', {action: action, data: data || ''}, done || null);
+    },
+
+    /** A call to the TV's remote control API (the TV asks once to allow it): done(payload) or null. */
+    control: function (uri, params, done) {
+      if (!webos) { if (done) done(null); return; }
+      ssap(uri, done || function () {}, params);
+    },
+
+    /** Renews Developer Mode from the TV, at most once a day: done({renewed, hours}) with the hours left, or null. */
+    renewDevMode: function (done) {
+      if (!webos) { done(null); return; }
+      luna('luna://' + self + '.service/renewDevMode', {}, done);
+    },
+
+    /** The service's sleep timer: off after minutes (0 cancels); done({at}) with the time it will turn off. */
+    sleep: function (minutes, done) {
+      if (!webos) { if (done) done(null); return; }
+      var key = null;
+      try { key = localStorage.getItem(SSAP_KEY); } catch (e) {}
+      luna('luna://' + self + '.service/sleep', {minutes: minutes, clientKey: key}, done || null);
+    },
+
+    /** Goal toasts on any app for these teams while they play. */
+    watchGoals: function (teams) {
+      if (!webos) return;
+      var key = null;
+      try { key = localStorage.getItem(SSAP_KEY); } catch (e) {}
+      luna('luna://' + self + '.service/watchGoals', {teams: teams, clientKey: key}, null);
+    },
+
+    /** A call to one of the service's methods (headlines, speedTest, remind, phone, f1): done(result) or null off LG. */
+    service: function (method, params, done) {
+      if (!webos) { if (done) done(null); return; }
+      var p = params || {};
+      if (method === 'remind' || method === 'backHome' || method === 'phone') {
+        try { p.clientKey = localStorage.getItem(SSAP_KEY); } catch (e) {}
+      }
+      luna('luna://' + self + '.service/' + method, p, done || null);
+    },
+
+    /** Matches for teams [{league, id}] from the app's service: done({teams: [...]}) or null (not on LG). */
+    football: function (teams, done) {
+      if (!webos) { done(null); return; }
+      luna('luna://' + self + '.service/football', {teams: teams}, done);
+    },
+
     /** Installed apps, as the TV's launcher lists them: [{id, title, icon, color}]. */
     apps: function (done) {
       if (samsung) { samsungApps(done); return; }
       if (!webos) {
+        // A preview built with webos/apps.py's list shows that TV's apps and icons instead of the samples.
+        var preview = (window.CONFIG && CONFIG.installedApps) || [];
+        if (preview.length) { done(preview); return; }
         done(SAMPLE.map(function (s) { return {id: s[0], title: s[1], icon: '', color: s[2]}; }));
         return;
       }
@@ -600,6 +668,12 @@ var TV = (function () {
     settings: function (done) {
       if (samsung) samsungSettings(done);
       else this.launch('com.palm.app.settings', null, done);
+    },
+
+    /** The TV's network settings (LG's settings app opened on its network page), to change the Wi-Fi. */
+    networkSettings: function (done) {
+      if (samsung) samsungSettings(done);
+      else this.launch('com.palm.app.settings', {target: 'network'}, done);
     },
 
     /** The TV's model, firmware, system, IP address and this app's version, for About this TV. */

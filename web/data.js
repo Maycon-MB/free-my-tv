@@ -61,7 +61,11 @@ var Prefs = (function () {
   var KEY = 'fmtv.prefs';
   var v = {};
   try { v = JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) {}
-  function save() { try { localStorage.setItem(KEY, JSON.stringify(v)); } catch (e) {} }
+  var savedListeners = [];
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(v)); } catch (e) {}
+    for (var i = 0; i < savedListeners.length; i++) savedListeners[i]();
+  }
   function pick(name, fallback) { return v[name] === undefined ? fallback : v[name]; }
   return {
     version: 0,
@@ -80,7 +84,7 @@ var Prefs = (function () {
     quotes: function () { return pick('quotes', CONFIG.showCrypto !== false); },
     coin: function (i) { var c = pick('coins', null); return c ? c[i] !== false : true; },
     /** Picks per tab: 3 (as it was) up to 6. */
-    cards: function () { var n = pick('cards', 3); return n < 3 ? 3 : n > 6 ? 6 : n; },
+    cards: function () { var n = pick('cards', 12); return n < 8 ? 8 : n > 14 ? 14 : n; },
     /** Cartoons and anime out of the picks (Home Settings), or config.properties' hide_animation. */
     hideAnimation: function () { return pick('hideAnimation', CONFIG.hideAnimation === true) === true; },
     shelf: function () { return pick('shelf', null); },
@@ -104,6 +108,11 @@ var Prefs = (function () {
     },
     openPicks: function () { return pick('openPicks', CONFIG.openPicksIn === 'nuvio' ? 'nuvio' : 'apps'); },
     set: function (name, value) { v[name] = value; save(); this.version++; },
+    /** fn() after every saved change (the backup listens). */
+    onSave: function (fn) { savedListeners.push(fn); },
+    /** Everything the person set, as stored: what the backup keeps. */
+    dump: function () { return JSON.stringify(v); },
+    get: function (name, fallback) { return pick(name, fallback); },
     setCoin: function (i, on) {
       var c = (pick('coins', null) || [true, true, true, true]).slice();
       c[i] = on;
@@ -333,6 +342,9 @@ var Data = (function () {
     ['paramount', 'paramount', /paramount|cbs/, /paramount/i, 'Paramount+'],
     ['peacock', 'peacock', /peacock/, /peacock/i, 'Peacock'],
     ['globoplay', 'globoplay', /globoplay/, /globoplay/i, 'Globoplay'],
+    ['claro', 'claro', /claro/, /claro/i, 'Claro tv+'],   // TMDB: Claro tv+ (484) and Claro video (167)
+    ['pluto', 'pluto', /pluto/, /pluto/i, 'Pluto TV'],   // free with ads: TMDB lists it under "ads"/"free"
+    ['mercado play', 'mercadoplay', /mercadoplay/, /mercado ?play/i, 'Mercado Play'],
     ['max', 'max', /hbo|wbd|\.max/, /^(hbo )?max$|hbo max/i, 'Max'],
     ['apple tv', 'appletv', /appletv|apple\.tv/, /apple tv/i, 'Apple TV'],
     ['hotstar', 'hotstar', /hotstar/, /hotstar/i, 'JioHotstar'],
@@ -402,7 +414,8 @@ var Data = (function () {
   }
 
   function sourceStamp() {
-    var s = KEY.length + ':' + KEY.slice(-6) + ':' + REGION + (Prefs.hideAnimation() ? ':no-animation' : '');
+    var s = KEY.length + ':' + KEY.slice(-6) + ':' + REGION + (Prefs.hideAnimation() ? ':no-animation' : '')
+      + (Prefs.get('kids', false) ? ':kids' : '');
     for (var i = 0; i < SERVICES.length; i++) s += usable(SERVICES[i][1]) ? '1' : '0';
     return s;
   }
@@ -477,6 +490,7 @@ var Data = (function () {
       var best = bestBackdrop(o.images);
       if (best) p.backdrop = best;
       if (o.poster_path) p.poster = o.poster_path;
+      if (o.overview) p.overview = o.overview;
       var parts = [];
       if (p.kind === 'tv') parts.push(tr('Series'));
       if (o.genres && o.genres.length) {
@@ -488,13 +502,9 @@ var Data = (function () {
       } else if (p.kind === 'tv' && o.number_of_seasons > 0) {
         parts.push(plural('plural|one:{n} season|other:{n} seasons', o.number_of_seasons));
       }
-      var wp = o['watch/providers'], here = wp && wp.results && wp.results[REGION], flat = here && here.flatrate;
-      p.app = null;
-      for (var i = 0; flat && i < flat.length && !p.app; i++) {
-        var s = service(flat[i].provider_name, flat[i].provider_id);
-        if (s && usable(s[1])) { p.app = s[1]; p.service = s[4]; }
-      }
-      if (p.service && p.app) parts.push(p.service);
+      var wp = o['watch/providers'];
+      placeTitle(p, wp && wp.results && wp.results[REGION]);
+      if (p.app) parts.push(p.service);
       p.meta = parts.join(' · ');
       title(p, o, function () {
         p.detailed = true;
@@ -521,6 +531,15 @@ var Data = (function () {
   /** TMDB's Animation genre (movies and shows: cartoons and anime), left out with Cartoons and anime off. */
   var ANIMATION = 16;
 
+  /** Kids mode keeps only TMDB's Animation, Family and Kids genres. */
+  function forFamily(o) {
+    for (var i = 0; o.genre_ids && i < o.genre_ids.length; i++) {
+      var g = o.genre_ids[i];
+      if (g === ANIMATION || g === 10751 || g === 10762) return true;
+    }
+    return false;
+  }
+
   function animated(o) {
     for (var i = 0; o.genre_ids && i < o.genre_ids.length; i++) if (o.genre_ids[i] === ANIMATION) return true;
     return false;
@@ -528,8 +547,73 @@ var Data = (function () {
 
   function addPick(list, o, kind) {
     if (!o.backdrop_path) return;
-    if (Prefs.hideAnimation() && animated(o)) return;
-    list.push({id: o.id, kind: kind, title: kind === 'movie' ? o.title : o.name, backdrop: o.backdrop_path, poster: o.poster_path || '', meta: '', app: null, detailed: false});
+    if (Prefs.get('kids', false) ? !forFamily(o) : Prefs.hideAnimation() && animated(o)) return;
+    list.push({id: o.id, kind: kind, title: kind === 'movie' ? o.title : o.name, backdrop: o.backdrop_path, poster: o.poster_path || '', meta: '', app: null, detailed: false,
+      year: String(o.release_date || o.first_air_date || '').slice(0, 4), overview: o.overview || ''});
+  }
+
+  // MARK: - Genres: the picks of one genre, only from the TV's apps (the home screen's chips and Search's)
+
+  // TMDB's ids differ between movies and shows; a genre without a show id (Horror, Romance) brings only movies.
+  var GENRES = [{name: 'Tudo'}, {name: 'Comédia', movie: 35, tv: 35}, {name: 'Ação', movie: 28, tv: 10759},
+    {name: 'Drama', movie: 18, tv: 18}, {name: 'Terror', movie: 27}, {name: 'Animação', movie: 16, tv: 16},
+    {name: 'Crime', movie: 80, tv: 80}, {name: 'Romance', movie: 10749}, {name: 'Documentário', movie: 99, tv: 99},
+    {name: 'Família', movie: 10751, tv: 10751}];
+  var GENRE_MAX = 14, GENRE_KEEP = 6 * 3600000, genreLists = {}, providerIds = null;
+
+  /** TMDB's ids of the services whose app this TV has (and Picks from leaves on). */
+  function myProviders(done) {
+    if (providerIds && providerIds.stamp === sourceStamp()) { done(providerIds.ids); return; }
+    tmdb('/watch/providers/movie?language=' + lang() + '&watch_region=' + REGION, function (err, res) {
+      var ids = [];
+      for (var i = 0; !err && res.results && i < res.results.length; i++) {
+        var s = service(res.results[i].provider_name, res.results[i].provider_id);
+        if (s && usable(s[1])) ids.push(res.results[i].provider_id);
+      }
+      if (!err) providerIds = {stamp: sourceStamp(), ids: ids};
+      done(ids);
+    });
+  }
+
+  function genreKey(kind, g) { return (kind || 'all') + ':' + g.name + ':' + sourceStamp(); }
+
+  /** A genre's list already fetched (in the last 6 hours), or null. */
+  function genreNow(kind, g) {
+    var hit = genreLists[genreKey(kind, g)];
+    return hit && Date.now() - hit.at < GENRE_KEEP ? hit.list : null;
+  }
+
+  /** done(list): the most popular titles of a genre on the TV's apps, each with where it streams. */
+  function byGenre(kind, g, done) {
+    var hit = genreNow(kind, g);
+    if (hit) { done(hit); return; }
+    myProviders(function (ids) {
+      if (!ids.length) { done([]); return; }
+      var found = {movie: [], tv: []}, kinds = kind ? [kind] : ['movie', 'tv'];
+      each(kinds, function (k, next) {
+        if (!g[k]) { next(); return; }
+        tmdb('/discover/' + k + '?with_genres=' + g[k] + '&vote_count.gte=' + (k === 'movie' ? 50 : 20) + '&language=' + lang()
+            + '&watch_region=' + REGION + '&with_watch_monetization_types=flatrate%7Cfree%7Cads&include_adult=false'
+            + '&sort_by=popularity.desc&with_watch_providers=' + encodeURIComponent(ids.join('|')), function (e, r) {
+          for (var j = 0; !e && r.results && j < r.results.length; j++) addPick(found[k], r.results[j], k);
+          next();
+        });
+      }, function () {
+        var list = [];
+        alternate(list, {}, found.movie, found.tv, GENRE_MAX);
+        each(list, function (p, next) {
+          streamsOn(p, function () {
+            p.meta = [p.kind === 'tv' ? tr('Series') : '', g.name, p.service].filter(function (x) { return x; }).join(' · ');
+            p.detailed = true;
+            next();
+          });
+        }, function () {
+          list = list.filter(function (p) { return p.app; });
+          genreLists[genreKey(kind, g)] = {at: Date.now(), list: list};
+          done(list);
+        });
+      });
+    });
   }
 
   function keyOf(p) { return p.kind + ':' + p.id; }
@@ -559,7 +643,7 @@ var Data = (function () {
         if (s && usable(s[1])) ids.push(res.results[i].provider_id);
       }
       if (!ids.length) { done(new Error("none of the TV's streaming apps are on TMDB (or switched on in Picks from)")); return; }
-      var common = '&language=' + lang() + '&watch_region=' + REGION + '&with_watch_monetization_types=flatrate&include_adult=false'
+      var common = '&language=' + lang() + '&watch_region=' + REGION + '&with_watch_monetization_types=flatrate%7Cfree%7Cads&include_adult=false'
           + '&sort_by=popularity.desc&with_watch_providers=' + encodeURIComponent(ids.join('|'))
           + (Prefs.hideAnimation() ? '&without_genres=' + ANIMATION : '');
       var hot = {movie: [], tv: []}, fresh = {movie: [], tv: []};
@@ -578,8 +662,9 @@ var Data = (function () {
           tmdb('/discover/tv?vote_count.gte=20&air_date.gte=' + day(-90) + '&air_date.lte=' + day(0) + common, function (e2, r2) {
             for (var k = 0; !e2 && k < r2.results.length; k++) addPick(fresh.tv, r2.results[k], 'tv');
             var list = [], seen = {};
-            alternate(list, seen, hot.movie, hot.tv, 24);
+            // What's popular and streaming in this region first, the worldwide trending after it.
             alternate(list, seen, fresh.movie, fresh.tv, 24);
+            alternate(list, seen, hot.movie, hot.tv, 24);
             if (!list.length) { done(new Error('TMDB returned no recommendations')); return; }
             picks = list;
             done(null);
@@ -642,6 +727,290 @@ var Data = (function () {
     try { return v.toLocaleString(I18N.locale(), {minimumFractionDigits: digits, maximumFractionDigits: digits}); } catch (e) { return v.toFixed(digits); }
   }
 
+  // MARK: - Search: TMDB's titles, each with the service it streams on here and whether the TV has that app
+
+  var genreNames = null, searchSeq = 0;
+
+  /** {id: name} for movie and TV genres, fetched once in the TV's language. */
+  function genres(done) {
+    if (genreNames) { done(genreNames); return; }
+    var names = {}, left = 2, failed = false;
+    ['movie', 'tv'].forEach(function (kind) {
+      tmdb('/genre/' + kind + '/list?language=' + lang(), function (err, o) {
+        failed = failed || !!err;
+        for (var i = 0; !err && o && o.genres && i < o.genres.length; i++) names[o.genres[i].id] = o.genres[i].name;
+        if (--left === 0) { if (!failed) genreNames = names; done(names); }   // a failure is asked again next search
+      });
+    });
+  }
+
+  /**
+   * Where a title streams here, from TMDB's providers for the region: p.apps (services whose app the TV has, the most
+   * launched first), p.app and p.service (the first), p.elsewhere (services without the app), p.paid (rent/buy).
+   * Subscription, free and free-with-ads all count: Pluto TV and Mercado Play are the last two.
+   */
+  function placeTitle(p, here) {
+    var offers = [].concat((here && here.flatrate) || [], (here && here.free) || [], (here && here.ads) || []);
+    var usage = Prefs.get('usage', {}), apps = [], elsewhere = [];
+    for (var i = 0; i < offers.length; i++) {
+      var s = service(offers[i].provider_name, offers[i].provider_id);
+      if (!s) continue;
+      if (usable(s[1])) { if (apps.indexOf(s[1]) < 0) apps.push(s[1]); } else if (elsewhere.indexOf(s[4]) < 0) elsewhere.push(s[4]);
+    }
+    function launches(key) { var a = appFor(key); return a ? usage[a.id] || 0 : 0; }
+    apps.sort(function (a, b) { return launches(b) - launches(a); });
+    p.apps = apps;
+    p.app = apps[0] || null;
+    p.service = p.app ? serviceName(p.app) : elsewhere[0] || '';
+    p.elsewhere = elsewhere;
+    var rent = here && here.rent && here.rent.length, buy = here && here.buy && here.buy.length;
+    p.paid = rent && buy ? 'Alugar ou comprar' : rent ? 'Alugar' : buy ? 'Comprar' : '';
+  }
+
+  function serviceName(key) {
+    for (var i = 0; i < SERVICES.length; i++) if (SERVICES[i][1] === key) return SERVICES[i][4];
+    return key;
+  }
+
+  function streamsOn(p, done) {
+    tmdb('/' + p.kind + '/' + p.id + '/watch/providers', function (err, o) {
+      placeTitle(p, !err && o && o.results && o.results[REGION]);
+      done();
+    });
+  }
+
+  var trailers = {}, titleLinks = {};
+
+  // MARK: - Episodes: a series' news for its card, the rule in one place
+  // "new": an episode came out in the last 7 days; "soon": one comes in the next 7 days; else nothing.
+
+  var EPISODE_WINDOW = 7 * 86400000, EPISODE_CACHE = 6 * 3600000, episodeNews = {};
+
+  function dayOf(date) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date || '');
+    return m ? new Date(+m[1], +m[2] - 1, +m[3]).getTime() : NaN;   // local midnight: "today" is the TV's day
+  }
+
+  /** done(null or {state: 'new' | 'soon', at, season, episode}) for a series, cached for 6 hours. */
+  function episodes(p, done) {
+    var hit = episodeNews[p.id];
+    if (p.kind !== 'tv') { done(null); return; }
+    if (hit && Date.now() - hit.at < EPISODE_CACHE) { done(hit.news); return; }
+    tmdb('/tv/' + Number(p.id) + '?language=' + lang(), function (err, o) {
+      var now = Date.now(), news = null, last = o && o.last_episode_to_air, next = o && o.next_episode_to_air;
+      if (!err && next && dayOf(next.air_date) - now < EPISODE_WINDOW && dayOf(next.air_date) >= now - 86400000) {
+        news = {state: dayOf(next.air_date) <= now ? 'new' : 'soon', at: dayOf(next.air_date), season: next.season_number,
+          episode: next.episode_number};
+      } else if (!err && last && now - dayOf(last.air_date) < EPISODE_WINDOW) {
+        news = {state: 'new', at: dayOf(last.air_date), season: last.season_number, episode: last.episode_number};
+      }
+      episodeNews[p.id] = {at: now, news: news};
+      done(news);
+    });
+  }
+
+  /**
+   * Services whose webOS app opens a title from launch params: Wikidata id properties and the params. Netflix's form
+   * is the community's; Disney+'s is what LG's own search sends it (browse id, P13902), tested on webOS 25. Others
+   * open on their home: a web address left Disney+ half-loaded, so no form is guessed.
+   */
+  var TITLE_LINKS = {
+    netflix: [['P1874'], function (id) { return {contentTarget: 'm=https://www.netflix.com/title/' + id + '&source_type=4'}; }],
+    disney: [['P13902'], function (id) {
+      return /^entity-[\w-]+$/.test(id) ? {handledBy: 'app', contentTarget: 'page=browse&id=' + id + '&distributionPartner=lg'} : null;
+    }]
+  };
+
+  /** The launch params that open a title in its service's app: done(params or null). */
+  function titleLink(p, service, done) {
+    var spec = TITLE_LINKS[service], k = service + ':' + keyOf(p);
+    if (service === 'prime') {   // no catalogue has Prime's ids for Brazil: the TV's service finds it on Prime's site
+      if (titleLinks[k] !== undefined) { done(titleLinks[k]); return; }
+      TV.service('primeId', {title: p.title}, function (res) {
+        titleLinks[k] = res && res.gti ? {contentTarget: res.gti} : null;
+        done(titleLinks[k]);
+      });
+      return;
+    }
+    if (!spec) { done(null); return; }
+    if (titleLinks[k] !== undefined) { done(titleLinks[k]); return; }
+    var tmdbProp = p.kind === 'tv' ? 'P4983' : 'P4947', alts = [];
+    for (var i = 0; i < spec[0].length; i++) alts.push('{ ?i wdt:' + spec[0][i] + ' ?n }');
+    var q = 'SELECT ?n WHERE { ?i wdt:' + tmdbProp + ' "' + Number(p.id) + '" . ' + alts.join(' UNION ') + ' } LIMIT 1';
+    get('https://query.wikidata.org/sparql?format=json&query=' + encodeURIComponent(q), {Accept: 'application/sparql-results+json'},
+        function (err, o) {
+      var b = !err && o && o.results && o.results.bindings && o.results.bindings[0];
+      var id = b && b.n && /^[\w.:\/-]+$/.test(b.n.value) ? b.n.value : '';
+      titleLinks[k] = id ? spec[1](id, p.kind) : null;
+      done(titleLinks[k]);
+    });
+  }
+
+  /** The title's YouTube trailer key: done(key or ''), Portuguese first, official before fan uploads. */
+  function trailer(p, done) {
+    var k = keyOf(p);
+    if (trailers[k] !== undefined) { done(trailers[k]); return; }
+    function best(o) {
+      var list = (o && o.results) || [], found = '';
+      for (var i = 0; i < list.length; i++) {
+        var v = list[i];
+        if (v.site !== 'YouTube' || (v.type !== 'Trailer' && v.type !== 'Teaser')) continue;
+        if (!found || (v.official && v.type === 'Trailer')) found = v.key;
+        if (v.official && v.type === 'Trailer') break;
+      }
+      return found;
+    }
+    tmdb('/' + p.kind + '/' + p.id + '/videos?language=' + lang(), function (err, o) {
+      var key = err ? '' : best(o);
+      if (key) { trailers[k] = key; done(key); return; }
+      tmdb('/' + p.kind + '/' + p.id + '/videos?language=en-US', function (err2, o2) {
+        trailers[k] = err2 ? '' : best(o2);
+        done(trailers[k]);
+      });
+    });
+  }
+
+  // Search rules, all here (the screen only shows what comes back):
+  // 1. A person ("Tom Hanks") brings their movies and shows; else titles from TMDB's search.
+  // 2. Nothing found: tries again without short words, then word by word (typos like "la casa d papel").
+  // 3. Order: streaming on the TV's apps first, then closest to what was typed, then popularity; making-ofs and
+  //    titles nobody rated go last.
+  var SEARCH_MAX = 15, SEARCH_PROVIDERS = 10;
+  var EXTRAS = /making of|bastidores|especial|behind the scenes|featurette/i;
+
+  /** Lowercase, without accents or punctuation: "Pokémon: O Filme" -> "pokemon o filme". */
+  function plain(text) {
+    var s = String(text || '').toLowerCase();
+    var from = 'áàâãäéèêëíìîïóòôõöúùûüçñ', to = 'aaaaaeeeeiiiiooooouuuucn';
+    for (var i = 0; i < from.length; i++) s = s.split(from.charAt(i)).join(to.charAt(i));
+    return s.replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+
+  /** How alike two texts are, 0 to 1 (Dice over letter pairs, spaces ignored): survives typos and glued words. */
+  function likeness(a, b) {
+    a = plain(a).replace(/ /g, '');
+    b = plain(b).replace(/ /g, '');
+    if (!a || !b) return 0;
+    if (a === b) return 1;
+    var pairs = {}, total = 0, hits = 0, i, k;
+    for (i = 0; i < a.length - 1; i++) { k = a.substr(i, 2); pairs[k] = (pairs[k] || 0) + 1; total++; }
+    for (i = 0; i < b.length - 1; i++) { k = b.substr(i, 2); total++; if (pairs[k] > 0) { pairs[k]--; hits++; } }
+    return total ? 2 * hits / total : 0;
+  }
+
+  /** The queries to try, in order: as typed, without words under 3 letters, then each long word, longest first. */
+  function attempts(query) {
+    var words = plain(query).split(' '), out = [query], longer = [], i;
+    for (i = 0; i < words.length; i++) if (words[i].length >= 3) longer.push(words[i]);
+    if (longer.length && longer.join(' ') !== plain(query)) out.push(longer.join(' '));
+    longer.sort(function (a, b) { return b.length - a.length; });
+    for (i = 0; i < longer.length && i < 2; i++) if (longer[i].length >= 4 && longer.length > 1) out.push(longer[i]);
+    // Last: the longest word's first 4 letters ("stranjer tings" -> "stra"); the likeness filter keeps the right one.
+    if (longer[0] && longer[0].length >= 6) out.push(longer[0].slice(0, 4));
+    return out;
+  }
+
+  function asTitle(r, kind, names) {
+    return {id: r.id, kind: kind, title: r.title || r.name || '', original: r.original_title || r.original_name || '',
+      year: (r.release_date || r.first_air_date || '').slice(0, 4), poster: r.poster_path, backdrop: r.backdrop_path,
+      popularity: r.popularity || 0, votes: r.vote_count || 0, app: null, service: '',
+      genres: (r.genre_ids || []).map(function (g) { return names[g]; }).filter(function (x) { return x; })};
+  }
+
+  /** Higher first: what the TV can play, then the closest name, then popularity; extras and unrated go down. */
+  function score(p, query) {
+    var near = Math.max(likeness(p.title, query), likeness(p.original, query));
+    var s = (p.app && usable(p.app) ? 2 : 0) + near * 1.5 + Math.min(1, Math.log(1 + p.popularity) / 6);
+    if (EXTRAS.test(p.title) || p.votes < 3) s -= 1.5;
+    return s;
+  }
+
+  function rank(list, query) {
+    return list.map(function (p, i) { return [p, score(p, query), i]; })
+      .sort(function (a, b) { return (b[1] - a[1]) || (a[2] - b[2]); })
+      .map(function (x) { return x[0]; });
+  }
+
+  // Talk shows, news and reality (TMDB genres): a guest spot there isn't one of the person's works.
+  var NOT_WORKS = [10767, 10763, 10764], AS_SELF = /self|himself|herself|ele mesmo|ela mesma/i;
+
+  /** A person's own work: films, series with 3+ episodes, or what they directed or created; best known first. */
+  function isWork(c) {
+    if ((c.media_type !== 'movie' && c.media_type !== 'tv') || !c.poster_path) return false;
+    if (c.job && c.job !== 'Director' && c.job !== 'Creator') return false;
+    for (var i = 0; c.genre_ids && i < c.genre_ids.length; i++) if (NOT_WORKS.indexOf(c.genre_ids[i]) >= 0) return false;
+    if (AS_SELF.test(c.character || '')) return false;
+    return c.media_type === 'movie' || !!c.job || (c.episode_count || 0) >= 3;
+  }
+
+  function personTitles(person, names, done) {
+    tmdb('/person/' + person.id + '/combined_credits?language=' + lang(), function (err, o) {
+      var seen = {}, out = [];
+      var all = ((o && o.cast) || []).concat((o && o.crew) || []).filter(isWork);
+      all.sort(function (a, b) { return (b.vote_count || 0) - (a.vote_count || 0); });
+      for (var i = 0; i < all.length && out.length < SEARCH_MAX; i++) {
+        var k = all[i].media_type + ':' + all[i].id;
+        if (seen[k]) continue;
+        seen[k] = true;
+        out.push(asTitle(all[i], all[i].media_type, names));
+      }
+      done(err, out);
+    });
+  }
+
+  /**
+   * Movies and shows for a query: done(error, [{id, kind, title, year, poster, backdrop, genres, app, service,
+   * paid, person}]). Only the newest query answers, so typing on doesn't show an older list.
+   */
+  function search(query, done) {
+    var seq = ++searchSeq, tries = attempts(query);
+    if (!KEY) { done(new Error('no key'), []); return; }
+    function finish(err, found, person) {
+      if (seq !== searchSeq) return;
+      if (err && !found.length) { done(err, []); return; }
+      found = found.slice(0, SEARCH_MAX);
+      var first = found.slice(0, SEARCH_PROVIDERS), left = first.length;
+      if (!left) { done(null, found); return; }
+      first.forEach(function (p) {
+        streamsOn(p, function () {
+          if (--left || seq !== searchSeq) return;
+          found = person ? found : rank(found, query);
+          if (person) for (var i = 0; i < found.length; i++) found[i].person = person;
+          done(null, found);
+        });
+      });
+    }
+    genres(function (names) {
+      (function attempt(n) {
+        tmdb('/search/multi?include_adult=false&language=' + lang() + '&query=' + encodeURIComponent(tries[n]),
+            function (err, o) {
+          if (seq !== searchSeq) return;
+          var results = (o && o.results) || [], who = null;
+          // A person whose name is what was typed ("Tom Hanks"), even below a documentary with the name in its
+          // title; but a title that looks like the query before them wins ("Kill Bill" is also an artist).
+          for (var j = 0; j < results.length && j < 6 && !who; j++) {
+            var r0 = results[j];
+            if (r0.media_type === 'person') { if (likeness(r0.name, query) > 0.85) who = r0; continue; }
+            if (likeness(r0.title || r0.name, query) > 0.6 || likeness(r0.original_title || r0.original_name, query) > 0.6) break;
+          }
+          if (who) {
+            personTitles(who, names, function (e, list) { finish(e, list, who.name); });
+            return;
+          }
+          var found = [];
+          for (var i = 0; i < results.length; i++) {
+            var r = results[i];
+            if ((r.media_type === 'movie' || r.media_type === 'tv') && r.poster_path) found.push(asTitle(r, r.media_type, names));
+          }
+          // A retry with fewer words matches loosely: keep only titles that look like what was typed.
+          if (n > 0) found = found.filter(function (p) { return Math.max(likeness(p.title, query), likeness(p.original, query)) > 0.5; });
+          if (!found.length && n + 1 < tries.length) { attempt(n + 1); return; }
+          finish(err, rank(found, query).slice(0, SEARCH_PROVIDERS + 5), null);
+        });
+      })(0);
+    });
+  }
+
   var SYMBOLS = {USD: '$', BRL: 'R$ ', EUR: '€', GBP: '£', JPY: '¥'};
 
   return {
@@ -652,6 +1021,14 @@ var Data = (function () {
     setApps: function (apps) { installed = apps; },
     appFor: appFor,
     usable: usable,
+    search: search,
+    titleLink: titleLink,
+    GENRES: GENRES,
+    byGenre: byGenre,
+    genreNow: genreNow,
+    trailer: trailer,
+    episodes: episodes,
+    serviceName: serviceName,
     services: services,
     refresh: function () { refreshWeather(); refreshPrices(); refreshRecs(); },
     settingsChanged: function () { pricesAt = 0; refreshPrices(); changed(); },
@@ -671,7 +1048,7 @@ var Data = (function () {
     recsError: function () { return recsError; },
     picks: now,
     showcase: all,
-    image: function (path, size) { return path ? 'https://image.tmdb.org/t/p/' + (size || 'w1280') + path : ''; },
+    image: function (path, size) { return path ? 'https://image.tmdb.org/t/p/' + (size || 'w1280') + encodeURI(path) : ''; },
 
     /** Night at the location: from sunset to sunrise (the last forecast; without one, 6:00 and 18:00). */
     isNight: function (at) {
