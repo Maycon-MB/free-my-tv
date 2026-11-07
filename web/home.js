@@ -306,7 +306,10 @@
       opening = {at: 0, title: ''};
       if (!params) {
         launcher(app.id, app.title, null)();
-        toast('Abrindo ' + app.title + ': procure “' + p.title + '” lá dentro.');
+        TV.service('typeLater', {title: p.title, appId: app.id}, function (res) {
+          toast(res ? 'Abrindo ' + app.title + ': abra a busca dele e “' + p.title + '” será digitado sozinho.'
+            : 'Abrindo ' + app.title + ': procure “' + p.title + '” lá dentro.');
+        });
       } else if (WARM_FIRST[p.app]) {
         countLaunch(app.id);
         TV.service('openWarm', {id: app.id, params: params, title: p.title}, function (res) {

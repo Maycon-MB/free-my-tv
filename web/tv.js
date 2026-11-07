@@ -563,7 +563,7 @@ var TV = (function () {
     service: function (method, params, done) {
       if (!webos) { if (done) done(null); return; }
       var p = params || {};
-      if (method === 'remind' || method === 'backHome' || method === 'phone') {
+      if (method === 'remind' || method === 'backHome' || method === 'phone' || method === 'typeLater') {
         try { p.clientKey = localStorage.getItem(SSAP_KEY); } catch (e) {}
       }
       luna('luna://' + self + '.service/' + method, p, done || null);

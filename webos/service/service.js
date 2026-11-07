@@ -278,7 +278,7 @@ var keepAsking = false;
 
 /** Keeps the service alive exactly while a timer, a reminder or a match watch is pending. */
 function hold() {
-  var need = !!(sleepTimer || watchTimer || reminderTimer || phone.server || back.on || warm.id);
+  var need = !!(sleepTimer || watchTimer || reminderTimer || phone.server || back.on || warm.id || later.conn);
   if (!service.activityManager) return;
   if (need && !keepAlive && !keepAsking) {
     keepAsking = true;
@@ -682,6 +682,49 @@ function pressKey(name) {
     for (var i = 0; phone.pointer && i < queued.length; i++) phone.pointer.send(queued[i]);
   });
 }
+
+// MARK: - A title for an app that can't open on it: typed by itself the first time a text field in another app
+// takes the focus (its search, opened by the person), within 3 minutes of the app opening.
+
+var TYPE_WAIT = 180000, later = {text: '', conn: null, timer: null};
+
+function laterNote(t) { notes.push(new Date().toISOString().slice(11, 19) + ' teclado: ' + t); if (notes.length > 40) notes.shift(); }
+
+function stopTypeLater() {
+  clearTimeout(later.timer);
+  later.text = '';
+  if (later.conn) later.conn.close();
+  later.conn = null;
+  hold();
+}
+
+service.register('typeLater', function (message) {
+  var p = message.payload || {};
+  if (p.clientKey) lastKey = p.clientKey;
+  var key = lastKey || back.key;
+  stopTypeLater();
+  warmStop();   // one pending title at a time
+  if (!p.title || !key || !/^[\w.-]+$/.test(p.appId || '')) { message.respond({returnValue: false}); return; }
+  later.text = String(p.title).slice(0, 80);
+  later.appId = p.appId;
+  later.timer = setTimeout(stopTypeLater, TYPE_WAIT);
+  later.conn = ssapSocket(key, {
+    registered: function () {
+      laterNote('registrado');
+      later.conn.send({type: 'subscribe', id: 'kb', uri: 'ssap://com.webos.service.ime/registerRemoteKeyboard'});
+    },
+    message: function (m) {
+      laterNote(JSON.stringify(m).slice(0, 220));
+      var w = m.id === 'kb' && m.payload && m.payload.currentWidget;
+      if (!w || !w.focus || !later.text || back.prev !== later.appId) return;   // only into the app it was opened for
+      call('com.webos.service.ime/insertText', key, {text: later.text, replace: 0}, function () {});
+      stopTypeLater();
+    },
+    end: function () { laterNote('fim'); later.conn = null; }
+  });
+  hold();
+  message.respond({returnValue: true});
+});
 
 /** Text from the phone: Free My TV's search takes it when open; otherwise the TV's keyboard types it. */
 function typeText(text) {
@@ -1129,6 +1172,7 @@ function warmArrived() {
 
 service.register('openWarm', function (message) {
   var p = message.payload || {};
+  stopTypeLater();   // one pending title at a time
   if (!/^[\w.-]+$/.test(p.id || '') || !p.params) { message.respond({returnValue: false}); return; }
   if (back.prev === p.id) { launchApp(p.id, p.params); message.respond({returnValue: true, warm: false}); return; }
   warmStop();
