@@ -577,3 +577,7 @@ body:not(.night) #morehint { color: #6E6E73; }
 .box .sechead { height: 48px; line-height: 56px; padding: 0 24px; font-family: 'Inter', sans-serif; font-size: 23px;
   font-weight: 700; color: #FF7A7F; }
 .box .sechead:first-child { height: 40px; line-height: 40px; }
+
+/* The hint sits bottom left, out of the way of the focused app's name; it fades when the name reaches it. */
+#morehint { left: 80px; right: auto; text-align: left; -webkit-transition: opacity 0.15s; transition: opacity 0.15s; }
+#morehint.away { opacity: 0; }

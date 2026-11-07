@@ -680,10 +680,13 @@
     var label = $('tilename'), app = st.zone === Z.SHELF ? shelf[st.shelf] : null;
     if (!label) return;
     label.style.opacity = app ? '1' : '0';
-    if (!app) return;
+    if (!app) { setClass($('morehint'), 'away', false); return; }
     label.textContent = app.title;
     var center = tileLeft + (st.shelf - shelfFirst) * tileStep + (tileStep - 48) / 2;
     label.style.left = Math.round(center - 300) + 'px';
+    var hint = $('morehint'), name = label.getBoundingClientRect(), under = hint && hint.getBoundingClientRect();
+    // the bottom line holds one text: the hint gives way while the app's name would cover it
+    if (hint) setClass(hint, 'away', !!under && under.width > 0 && name.left < under.right + 20);
   }
 
   // MARK: - System stats (CPU, RAM, network), only while the home screen shows
@@ -1668,6 +1671,7 @@
     }
     drawerInputs = drawerItems.length;
     drawerItems.push({label: tr('All Apps'), symbol: 'apps', run: openApps});
+    drawerItems.push({label: 'Adicionar app', symbol: 'icons/sym-add.svg', run: function () { openShelfEdit(Z.DRAWER); }});
     drawerItems.push({label: tr('Home Settings'), symbol: 'settings', run: openSettings});
     if (TV.canOpenSettings) drawerItems.push({label: tr('TV Settings'), symbol: 'tv_settings', run: tvSettings});
     var n = drawerItems.length, gap = 18, groupGap = 56, groups = drawerInputs > 0 && drawerInputs < n ? 2 : 1;
@@ -2359,7 +2363,10 @@
     updateFocus();
   }
 
-  function openShelfEdit() {
+  var editFrom = null;
+
+  function openShelfEdit(from) {
+    editFrom = from === Z.DRAWER ? Z.DRAWER : null;   // Back returns where it was opened
     setClass($('settings'), 'open', false);
     st.zone = Z.EDIT;
     st.edit = 0;
@@ -2762,6 +2769,7 @@
   function back() {
     if (st.zone === Z.EDIT) {
       setClass($('shelfedit'), 'open', false);
+      if (editFrom === Z.DRAWER) { st.zone = Z.DRAWER; updateFocus(); return; }
       openSettings();
       for (var i = 0; i < rowsNow.length; i++) if (rowsNow[i].shelf) st.row = i;   // back on the Shelf row, whatever follows it
       updateFocus();
