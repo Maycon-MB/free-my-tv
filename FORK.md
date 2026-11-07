@@ -12,8 +12,8 @@ Tudo à vista, sem gesto escondido (o padrão de Netflix e YouTube):
   e manchete (jogo ao vivo fica fixo). ← → anda na linha; ↑ ↓ troca de linha.
 - **Gêneros:** abaixo das abas, Tudo, Comédia, Ação, Drama, Terror… (só títulos dos seus apps). No Pesquisar, o
   botão Gênero sem digitar nada lista o gênero inteiro.
-- **Vitrine:** o título em foco aparece grande (foto, resumo e "Assistir no app"); embaixo, 11 pôsteres por vez
-  com o ícone do app no canto.
+- **Palco:** o título em foco fica grande no centro da fileira, com a foto inteira; os vizinhos são pôsteres
+  dos dois lados. Nome e app embaixo do palco (o ícone do app nos pôsteres fica só na pesquisa).
 - **Minha lista:** OK num filme ou série → + Minha lista; na mesma página, "− Tirar da minha lista". Cada perfil
   tem a sua.
 - **Fileira de apps:** ← → percorre, OK abre. Segurar OK num app muda ele de lugar (atalho; também há a ordem
@@ -38,10 +38,10 @@ Tudo à vista, sem gesto escondido (o padrão de Netflix e YouTube):
 | Navegação | Volta sempre ao Free My TV quando a home da LG aparece (serviço assina o app em primeiro plano) | `webos/service/service.js` |
 | Apps | Todos os apps na fileira; segurar OK move; ordem manual ou mais usados; Claro tv+, Pluto TV e Mercado Play reconhecidos | `web/home.js`, `web/data.js` |
 | Apps | Título em vários apps: um Assistir por app (os mais usados primeiro), ícones nos resultados; conta assinatura, grátis e com anúncios | `web/data.js`, `web/home.js` |
-| Apps | Abre no título: Netflix (Wikidata P1874) e Disney+ (P13902, formato da busca da LG); os demais na tela inicial | `web/data.js` |
+| Apps | Abre no título: Netflix (Wikidata P1874) e Disney+ (P13902, formato da busca da LG; abre o app e manda o título aos 8 s e 20 s, depois da escolha de perfil); os demais na tela inicial | `web/data.js` |
 | Pesquisa | TMDB com filtros; tolera erro de digitação; nome de ator traz os trabalhos dele; seus apps primeiro | `web/data.js` |
 | Pesquisa | Resultados ao digitar; QR code para digitar pelo celular (porta 8770, código de 4 dígitos) | `web/home.js`, `webos/service/service.js` |
-| Explorar | Vitrine do título em foco + 8 a 14 pôsteres (padrão 12), o que passa no Brasil primeiro, ícone do app no canto, destaque girando | `web/data.js`, `web/home.js` |
+| Explorar | Palco no centro (foto 16:9 inteira, borda do palco do portfólio) + pôsteres dos lados, 8 a 14 por aba (padrão 12), destaque girando | `web/data.js`, `web/home.js` |
 | Explorar | Gêneros (TMDB discover por gênero, só nos provedores dos seus apps, guardado 6 h), na tela inicial e no Pesquisar | `web/data.js`, `web/home.js` |
 | Apps | Todos os apps lista tudo em ordem alfabética; Loja LG visível e com atalho; Adicionar app na fileira de baixo | `web/home.js`, `web/tv.js` |
 | Perfis | Ordem dos apps, tema, cor, fundo, modo infantil, lista, recentes, o que o cartão do topo mostra (jogos, F1, manchetes) e painel de desempenho | `web/home.js` |
@@ -50,7 +50,7 @@ Tudo à vista, sem gesto escondido (o padrão de Netflix e YouTube):
 | Celular | Controle remoto completo (setas, OK, Voltar, Início, volume, play, digitar) em qualquer app; pareia uma vez pelo QR (porta 8770, token guardado) | `webos/service/service.js` |
 | TV | Painel de desempenho (CPU, RAM, swap, rede de `/proc`); manchetes do ge e g1 no topo | `webos/service/service.js` |
 | TV | Developer Mode renovado pela própria TV, uma vez por dia; backup das configurações; app como entrada | `webos/service/service.js`, `webos/backup.py` |
-| Memória | Pôsteres em 185 px; só a vitrine guarda a foto de 1280 px (a camada escondida solta a dela); pesquisa e página do título soltam as imagens ao fechar | `web/home.js` |
+| Memória | Pôsteres em 185 px; só o palco guarda uma foto de 780 px; pesquisa e página do título soltam as imagens ao fechar | `web/home.js` |
 
 ## Instalar nesta TV
 
