@@ -446,6 +446,7 @@
     var room = holder.parentNode.offsetHeight, at = rows[index] ? rows[index].offsetTop : 0;
     var shift = Math.max(0, Math.min(holder.offsetHeight - room, at - 3 * 78));   // focused row 4th from the top
     holder.style.webkitTransform = holder.style.transform = 'translateY(' + (-shift) + 'px)';
+    setClass(holder.parentNode, 'goes-on', holder.offsetHeight - room - shift > 8);   // rows still below: the fade says so
   }
 
   function nearest(nodes, x) {
@@ -483,7 +484,7 @@
     buttons.innerHTML = '';
     // Material Symbols Rounded (Apache 2.0) as vectors: sharp at any scale, one stroke weight for the four.
     // Named buttons, as YouTube's and Netflix's: what each does is read, not guessed from an icon.
-    var defs = [['icons/sym-network_wifi.svg', '', 76], ['icons/sym-search.svg', 'Pesquisar', 250],
+    var defs = [['icons/sym-network_wifi.svg', 'Internet', 220], ['icons/sym-search.svg', 'Pesquisar', 250],
       ['icons/sym-tune.svg', 'Controles', 240], ['icons/sym-settings.svg', 'Ajustes', 200]];
     for (var b = 0, x = 1840; b < defs.length; b++) x -= defs[b][2] + (b ? 16 : 0);
     for (b = 0; b < defs.length; b++) {
@@ -764,13 +765,13 @@
     var label = $('tilename'), app = st.zone === Z.SHELF ? shelf[st.shelf] : null;
     if (!label) return;
     label.style.opacity = app ? '1' : '0';
-    if (!app) { setClass($('morehint'), 'away', false); return; }
+    var hint = $('morehint');
+    if (!app) { if (hint) setClass(hint, 'left', false); return; }
     label.textContent = app.title;
     var center = tileLeft + (st.shelf - shelfFirst) * tileStep + (tileStep - 48) / 2;
     label.style.left = Math.round(center - 300) + 'px';
-    var hint = $('morehint'), name = label.getBoundingClientRect(), under = hint && hint.getBoundingClientRect();
-    // the bottom line holds one text: the hint gives way while the app's name would cover it
-    if (hint) setClass(hint, 'away', !!under && under.width > 0 && name.left < under.right + 20);
+    // the hint stays visible: it moves to the left end while the app's name would reach it on the right
+    if (hint) setClass(hint, 'left', center + 300 > 1840 - hint.offsetWidth - 20);
   }
 
   // MARK: - System stats (CPU, RAM, network), only while the home screen shows
@@ -1073,9 +1074,11 @@
     el('div', 'dmeta', info, [p.year, about, where].filter(function (x) { return x; }).join('  ·  '));
     if (p.kind === 'tv') {
       Data.episodes(p, function (n) {
-        if (n && dtTitle === p) el('div', 'depisode', info, n.state === 'new' ? episodeText(n) : 'Próximo episódio: ' + episodeText(n));
+        // under the meta line even when the answer comes after the buttons are drawn
+        if (n && dtTitle === p) info.insertBefore(el('div', 'depisode', null, episodeText(n)), info.children[2] || null);
       });
     }
+    if (p.overview) el('div', 'dabout', info, p.overview);
     if (app && p.elsewhere && p.elsewhere.length) el('div', 'delse', info, 'Também em ' + p.elsewhere.slice(0, 3).join(', ') + ' (sem o app)');
     var row = el('div', 'dbtns', info), buttons = dtButtons = detailButtons();   // kept: OK runs what is drawn
     for (var i = 0; i < buttons.length; i++) hover(el('div', 'dbtn' + (i === 0 && app ? ' primary' : ''), row, buttons[i].label), Z.DETAIL, i);
@@ -1516,7 +1519,7 @@
 
   function srCount() {
     var n = srShown.length;
-    return n ? n + (n > 1 ? ' resultados' : ' resultado') + ' · OK abre · segure OK para o trailer'
+    return n ? n + (n > 1 ? ' resultados' : ' resultado') + ' · OK abre'
       : 'Nada encontrado com esses filtros.';
   }
 
@@ -1567,7 +1570,7 @@
     var inField = typingIn('searchpage');
     page.innerHTML = '';
     var head = el('div', 'shead', page);
-    el('div', 'eyebrow', head, '// Pesquisar');
+    el('div', 'eyebrow', head, 'Pesquisar');
     var field = el('input', '', el('div', 'sfield', head));
     field.type = 'text';
     field.value = typed;
@@ -2056,8 +2059,8 @@
   // Home Settings in named groups, so each option is found by what it changes; the order inside a group is kept.
   function inSections(rows, services) {
     var groups = [
-      ['Perfil', ['Perfil', 'Nome do perfil', 'Cor de destaque', 'Fundo', 'Constelação em movimento', tr('Theme'),
-        'Modo infantil', 'Novo perfil', 'Excluir este perfil']],
+      ['Quem está usando', ['Perfil', 'Nome do perfil', 'Cor de destaque', 'Fundo', 'Constelação em movimento',
+        tr('Theme'), 'Modo infantil', 'Novo perfil', 'Excluir este perfil']],
       ['Tela inicial', ['Topo: jogos dos meus times', 'Topo: Fórmula 1', 'Topo: manchetes', 'Times', tr('Shelf'),
         'Ordem dos apps', 'Destaque girando', tr('Picks per tab'), tr('Cartoons and anime'), 'Painel de desempenho',
         tr('Weather widget'), tr('City'), tr('Forecast')]],
@@ -2680,7 +2683,7 @@
   /** What My list and the recent titles keep of a title: enough to draw its card and open it. */
   function keptTitle(p) {
     return {id: p.id, kind: p.kind, title: p.title, poster: p.poster, backdrop: p.backdrop, app: p.app, apps: p.apps,
-      service: p.service, meta: p.meta, year: p.year || '', genres: p.genres || []};
+      service: p.service, meta: p.meta, year: p.year || '', genres: p.genres || [], overview: p.overview || ''};
   }
 
   function countLaunch(id) {
@@ -2700,16 +2703,20 @@
 
   var DAYS = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
 
-  /** "Novo episódio" or "T2E5 · sexta": what a series in My list has this week. */
+  /** "Episódio 8 novo" or "Episódio 8 chega terça": what a series in My list has this week. */
   function episodeText(n) {
-    var ep = 'T' + n.season + 'E' + n.episode;
-    return n.state === 'new' ? 'Novo episódio · ' + ep : ep + ' · ' + DAYS[new Date(n.at).getDay()];
+    return 'Episódio ' + n.episode + (n.state === 'new' ? ' novo' : ' chega ' + DAYS[new Date(n.at).getDay()]);
+  }
+
+  /** The same news in a poster's width: "Novo ep. 8" or "Ep. 8 · terça". */
+  function episodeShort(n) {
+    return n.state === 'new' ? 'Novo ep. ' + n.episode : 'Ep. ' + n.episode + ' · ' + DAYS[new Date(n.at).getDay()];
   }
 
   function episodeBadge(p, holder) {
     Data.episodes(p, function (n) {
       if (!n || !holder.parentNode) return;
-      el('div', 'epbadge' + (n.state === 'new' ? ' fresh' : ''), holder, episodeText(n));
+      el('div', 'epbadge' + (n.state === 'new' ? ' fresh' : ''), holder, episodeShort(n));
     });
   }
 
