@@ -824,6 +824,14 @@ var Data = (function () {
   /** The launch params that open a title in its service's app: done(params or null). */
   function titleLink(p, service, done) {
     var spec = TITLE_LINKS[service], k = service + ':' + keyOf(p);
+    if (service === 'prime') {   // no catalogue has Prime's ids for Brazil: the TV's service finds it on Prime's site
+      if (titleLinks[k] !== undefined) { done(titleLinks[k]); return; }
+      TV.service('primeId', {title: p.title}, function (res) {
+        titleLinks[k] = res && res.gti ? {contentTarget: res.gti} : null;
+        done(titleLinks[k]);
+      });
+      return;
+    }
     if (!spec) { done(null); return; }
     if (titleLinks[k] !== undefined) { done(titleLinks[k]); return; }
     var tmdbProp = p.kind === 'tv' ? 'P4983' : 'P4947', alts = [];

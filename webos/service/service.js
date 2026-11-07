@@ -424,6 +424,61 @@ function titles(xml) {
   return out;
 }
 
+// MARK: - Prime Video's own id for a title (amzn1.dv.gti...): its app opens a title from that id only, and no open
+// catalogue has it for Brazil. Found as a person would: Prime's search page, then the title's page.
+
+var PRIME = 'https://www.primevideo.com', primeIds = {};
+
+/** A Prime page's HTML (redirects followed only within primevideo.com), or '' on any failure. */
+function primePage(path, done, hops) {
+  var req = https.get(PRIME + path, {headers: {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+      + '(KHTML, like Gecko) Chrome/130.0 Safari/537.36', 'Accept-Language': 'pt-BR,pt;q=0.9'}}, function (res) {
+    var to = res.headers.location;
+    if (res.statusCode >= 300 && res.statusCode < 400 && to && (hops || 0) < 2) {
+      res.resume();
+      var m = /^(?:https:\/\/www\.primevideo\.com)?(\/[^\s]*)$/.exec(to);
+      if (m) primePage(m[1], done, (hops || 0) + 1); else done('');
+      return;
+    }
+    var body = '';
+    res.setEncoding('utf8');
+    res.on('data', function (c) { if (body.length < 3e6) body += c; });
+    res.on('end', function () { done(res.statusCode === 200 ? body : ''); });
+  });
+  req.on('error', function () { done(''); });
+  req.setTimeout(10000, function () { req.abort(); });
+}
+
+function plainTitle(t) {
+  return String(t || '').replace(/&amp;/g, '&').replace(/&#39;|&apos;/g, "'").replace(/&quot;/g, '"').toLowerCase()
+    .replace(/[àáâãä]/g, 'a').replace(/[èéêë]/g, 'e').replace(/[ìíîï]/g, 'i').replace(/[òóôõö]/g, 'o')
+    .replace(/[ùúûü]/g, 'u').replace(/ç/g, 'c').replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+/** done(gti or ''): the search's card whose name is the title (or ends with it, "O Senhor dos Anéis: Os Anéis de
+ *  Poder"), then that page's id. Kept for the service's life. */
+function primeId(title, done) {
+  var want = plainTitle(title);
+  if (primeIds[want] !== undefined) { done(primeIds[want]); return; }
+  primePage('/-/pt/search/ref=atv_nb_sug?phrase=' + encodeURIComponent(title), function (html) {
+    var re = /data-card-title="([^"]*)"[\s\S]*?href="\/-\/pt\/detail\/([A-Za-z0-9]+)/g, m, page = '';
+    while ((m = re.exec(html)) && !page) {
+      var name = plainTitle(m[1]);
+      if (name === want || (want.length > 3 && name.slice(-want.length - 1) === ' ' + want)) page = m[2];
+    }
+    if (!page) { primeIds[want] = ''; done(''); return; }
+    primePage('/-/pt/detail/' + page, function (detail) {
+      var id = /"pageTitleId":"(amzn1\.dv\.gti\.[0-9a-f-]+)"/.exec(detail);
+      primeIds[want] = id ? id[1] : '';
+      done(primeIds[want]);
+    });
+  });
+}
+
+service.register('primeId', function (message) {
+  primeId((message.payload || {}).title, function (gti) { message.respond({returnValue: true, gti: gti}); });
+});
+
 service.register('headlines', function (message) {
   if (infoCache.data && Date.now() - infoCache.at < 600000) { message.respond(infoCache.data); return; }
   var out = {returnValue: true, headlines: [], rates: {}}, left = HEADLINE_FEEDS.length + 1;

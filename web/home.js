@@ -290,7 +290,7 @@
 
   /** Opens a title in its app, on the title's page when Wikidata knows its id there (else on the app's home). */
   // Apps that hang on a link when it comes with a cold start: the service opens them plain, then sends the title.
-  var WARM_FIRST = {disney: true};
+  var WARM_FIRST = {disney: true, prime: true};
   // Opening a title: one at a time. A second OK while one opens says so instead of doing nothing; after
   // OPEN_WAIT the attempt counts as over, so a lost answer never locks the button.
   var OPEN_WAIT = 15000, opening = {at: 0, title: ''};
