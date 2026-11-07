@@ -626,8 +626,11 @@ body:not(.night) #morehint { color: #6E6E73; }
 .card.stage { top: 312px; width: 720px; height: 405px; opacity: 1; }
 .card .img, .card .img::after { border-radius: 14px; }
 .card.stage .img, .card.stage .img::after { border-radius: 18px; }
-.card .back { opacity: 0; }
-.card.stage .back { opacity: 1; }
+.card .back { opacity: 0; background-color: #141417; -webkit-transition: opacity 0.25s; transition: opacity 0.25s; }
+.card.stage .back.ready { opacity: 1; }
+.card.stage .layer { visibility: hidden; }
+.card.stage .layer.back { visibility: visible; }
+.card.stage .img { background-color: #141417; }
 .card.stage .img::before {
   content: ''; position: absolute; left: 0; top: 0; right: 0; bottom: 0; z-index: 1; border-radius: 18px;
   border: 1px solid rgba(255, 255, 255, 0.12); border-top-color: rgba(255, 90, 95, 0.45);

@@ -296,6 +296,7 @@
   var OPEN_WAIT = 15000, opening = {at: 0, title: ''};
 
   function openTitle(p, app, params) {
+    note('abrir ' + p.title + ' em ' + app.id + (params ? ' com link' : ''));
     rememberTitle(p);
     if (params || !p.app) { launcher(app.id, app.title, params)(); return null; }
     if (Date.now() - opening.at < OPEN_WAIT) { toast('Ainda abrindo “' + opening.title + '”…'); return true; }
@@ -600,6 +601,18 @@
   }
 
   // The stage's card in the middle; the posters on each side, fading with distance; the rest not drawn at all.
+  /** The stage's photo once loaded: until then the stage stays dark rather than show the poster blown up. */
+  function showPhoto(layer, url) {
+    var img = new Image();
+    layer.setAttribute('data-url', url);
+    img.onload = function () {
+      if (layer.getAttribute('data-url') !== url) return;   // left the stage while loading
+      layer.style.backgroundImage = 'url("' + url + '")';
+      setClass(layer, 'ready', true);
+    };
+    img.src = url;
+  }
+
   var STAGE_LEFT = 600, STAGE_W = 720, SIDE_W = 180, SIDE_GAP = 20, SIDE_SEEN = 4, stageAt = -1;
 
   function layoutCards() {
@@ -611,11 +624,13 @@
       n.style.left = left + 'px';
       n.className = n.className.replace(/\s*\b(stage|side|far|off)\b/g, '') +
         (d === 0 ? ' stage' : Math.abs(d) > SIDE_SEEN ? ' off' : Math.abs(d) > 1 ? ' far' : ' side');
-      if (d === 0 && cards[i] && !back.style.backgroundImage) {
-        back.style.backgroundImage = 'url("' + Data.image(cards[i].backdrop, 'w780') + '")';
-      } else if (d !== 0 && back.style.backgroundImage) {
+      if (d === 0 && cards[i] && !back.getAttribute('data-url')) showPhoto(back, Data.image(cards[i].backdrop, 'w780'));
+      else if (d !== 0 && back.getAttribute('data-url')) {
+        back.removeAttribute('data-url');
         back.style.backgroundImage = '';   // one 780 px photo decoded at a time
+        setClass(back, 'ready', false);
       }
+      if (Math.abs(d) === 1 && cards[i]) new Image().src = Data.image(cards[i].backdrop, 'w780');   // next one ready
     }
     if (stageAt !== st.card && nodes[st.card]) {   // one short pulse of the edge when the title on stage changes
       stageAt = st.card;
@@ -1034,6 +1049,9 @@
 
   function openDetail(p) {
     if (!p) return;
+    note('pagina ' + p.title + ' app=' + p.app);
+    // A search field left focused under the page would take its keys: OK would search again, not press Watch
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
     var page = $('detail'), app = p.app && Data.appFor(p.app);
     dtTitle = p;
     dtFrom = st.zone;
@@ -1701,7 +1719,13 @@
     });
   }
 
+  /** A line in the TV service's notes (errors, what was opened), for finding what failed on the TV itself. */
+  function note(text) { TV.service('notes', {text: text}); }
+
+  window.onerror = function (msg, src, line) { note('erro: ' + msg + ' @' + String(src).split('/').pop() + ':' + line); };
+
   function activateSearch() {
+    note('pesquisa OK parte=' + srPart + ' item=' + srItem + ' de ' + srShown.length);
     if (srPart === 0) { openField('searchpage'); return; }
     if (srPart === 1) {
       if (browsing() && (srChip === 2 || (srChip === 0 && srGenre))) {
@@ -2631,6 +2655,7 @@
   function launcher(id, name, params) {
     return function () {
       TV.launch(id, params || null, function (ok) {
+        note('launch ' + id + ' -> ' + (ok ? 'ok' : 'falhou'));
         if (!ok) toast(trf("Couldn't open {app}.", {app: name || id}));
         else countLaunch(id);
       });

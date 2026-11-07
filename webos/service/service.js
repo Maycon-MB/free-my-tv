@@ -961,6 +961,18 @@ function qrEncode(text) {
 var LG_HOME = /^com\.webos\.app\.home$/;
 var back = {on: false, conn: null, key: null, prev: '', at: 0, retry: null, log: []};
 
+// The web app's errors and what it opened, kept in memory: luna-send-pub .../notes {} reads them from a computer.
+var notes = [];
+
+service.register('notes', function (message) {
+  var p = message.payload || {};
+  if (p.text) {
+    notes.push(new Date().toISOString().slice(11, 19) + ' ' + String(p.text).slice(0, 300));
+    if (notes.length > 40) notes.shift();
+  }
+  message.respond({returnValue: true, notes: p.text ? undefined : notes.slice(-40)});
+});
+
 function backLog(text) {
   back.log.push(new Date().toISOString().slice(11, 19) + ' ' + text);
   if (back.log.length > 30) back.log.shift();
