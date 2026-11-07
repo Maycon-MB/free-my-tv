@@ -84,7 +84,7 @@ var Prefs = (function () {
     quotes: function () { return pick('quotes', CONFIG.showCrypto !== false); },
     coin: function (i) { var c = pick('coins', null); return c ? c[i] !== false : true; },
     /** Picks per tab: 3 (as it was) up to 6. */
-    cards: function () { var n = pick('cards', 6); return n < 3 ? 3 : n > 6 ? 6 : n; },
+    cards: function () { var n = pick('cards', 12); return n < 8 ? 8 : n > 14 ? 14 : n; },
     /** Cartoons and anime out of the picks (Home Settings), or config.properties' hide_animation. */
     hideAnimation: function () { return pick('hideAnimation', CONFIG.hideAnimation === true) === true; },
     shelf: function () { return pick('shelf', null); },
@@ -490,6 +490,7 @@ var Data = (function () {
       var best = bestBackdrop(o.images);
       if (best) p.backdrop = best;
       if (o.poster_path) p.poster = o.poster_path;
+      if (o.overview) p.overview = o.overview;
       var parts = [];
       if (p.kind === 'tv') parts.push(tr('Series'));
       if (o.genres && o.genres.length) {
@@ -547,7 +548,72 @@ var Data = (function () {
   function addPick(list, o, kind) {
     if (!o.backdrop_path) return;
     if (Prefs.get('kids', false) ? !forFamily(o) : Prefs.hideAnimation() && animated(o)) return;
-    list.push({id: o.id, kind: kind, title: kind === 'movie' ? o.title : o.name, backdrop: o.backdrop_path, poster: o.poster_path || '', meta: '', app: null, detailed: false});
+    list.push({id: o.id, kind: kind, title: kind === 'movie' ? o.title : o.name, backdrop: o.backdrop_path, poster: o.poster_path || '', meta: '', app: null, detailed: false,
+      year: String(o.release_date || o.first_air_date || '').slice(0, 4), overview: o.overview || ''});
+  }
+
+  // MARK: - Genres: the picks of one genre, only from the TV's apps (the home screen's chips and Search's)
+
+  // TMDB's ids differ between movies and shows; a genre without a show id (Horror, Romance) brings only movies.
+  var GENRES = [{name: 'Tudo'}, {name: 'Comédia', movie: 35, tv: 35}, {name: 'Ação', movie: 28, tv: 10759},
+    {name: 'Drama', movie: 18, tv: 18}, {name: 'Terror', movie: 27}, {name: 'Animação', movie: 16, tv: 16},
+    {name: 'Crime', movie: 80, tv: 80}, {name: 'Romance', movie: 10749}, {name: 'Documentário', movie: 99, tv: 99},
+    {name: 'Família', movie: 10751, tv: 10751}];
+  var GENRE_MAX = 14, GENRE_KEEP = 6 * 3600000, genreLists = {}, providerIds = null;
+
+  /** TMDB's ids of the services whose app this TV has (and Picks from leaves on). */
+  function myProviders(done) {
+    if (providerIds && providerIds.stamp === sourceStamp()) { done(providerIds.ids); return; }
+    tmdb('/watch/providers/movie?language=' + lang() + '&watch_region=' + REGION, function (err, res) {
+      var ids = [];
+      for (var i = 0; !err && res.results && i < res.results.length; i++) {
+        var s = service(res.results[i].provider_name, res.results[i].provider_id);
+        if (s && usable(s[1])) ids.push(res.results[i].provider_id);
+      }
+      if (!err) providerIds = {stamp: sourceStamp(), ids: ids};
+      done(ids);
+    });
+  }
+
+  function genreKey(kind, g) { return (kind || 'all') + ':' + g.name + ':' + sourceStamp(); }
+
+  /** A genre's list already fetched (in the last 6 hours), or null. */
+  function genreNow(kind, g) {
+    var hit = genreLists[genreKey(kind, g)];
+    return hit && Date.now() - hit.at < GENRE_KEEP ? hit.list : null;
+  }
+
+  /** done(list): the most popular titles of a genre on the TV's apps, each with where it streams. */
+  function byGenre(kind, g, done) {
+    var hit = genreNow(kind, g);
+    if (hit) { done(hit); return; }
+    myProviders(function (ids) {
+      if (!ids.length) { done([]); return; }
+      var found = {movie: [], tv: []}, kinds = kind ? [kind] : ['movie', 'tv'];
+      each(kinds, function (k, next) {
+        if (!g[k]) { next(); return; }
+        tmdb('/discover/' + k + '?with_genres=' + g[k] + '&vote_count.gte=' + (k === 'movie' ? 50 : 20) + '&language=' + lang()
+            + '&watch_region=' + REGION + '&with_watch_monetization_types=flatrate%7Cfree%7Cads&include_adult=false'
+            + '&sort_by=popularity.desc&with_watch_providers=' + encodeURIComponent(ids.join('|')), function (e, r) {
+          for (var j = 0; !e && r.results && j < r.results.length; j++) addPick(found[k], r.results[j], k);
+          next();
+        });
+      }, function () {
+        var list = [];
+        alternate(list, {}, found.movie, found.tv, GENRE_MAX);
+        each(list, function (p, next) {
+          streamsOn(p, function () {
+            p.meta = [p.kind === 'tv' ? tr('Series') : '', g.name, p.service].filter(function (x) { return x; }).join(' · ');
+            p.detailed = true;
+            next();
+          });
+        }, function () {
+          list = list.filter(function (p) { return p.app; });
+          genreLists[genreKey(kind, g)] = {at: Date.now(), list: list};
+          done(list);
+        });
+      });
+    });
   }
 
   function keyOf(p) { return p.kind + ':' + p.id; }
@@ -949,6 +1015,9 @@ var Data = (function () {
     usable: usable,
     search: search,
     titleLink: titleLink,
+    GENRES: GENRES,
+    byGenre: byGenre,
+    genreNow: genreNow,
     trailer: trailer,
     episodes: episodes,
     serviceName: serviceName,

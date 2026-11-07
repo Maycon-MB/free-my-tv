@@ -10,12 +10,19 @@ Tudo à vista, sem gesto escondido (o padrão de Netflix e YouTube):
 - **Topo, duas linhas:** em cima, o menu (ícone de rede verde com barras ou vermelho, Pesquisar, Controles,
   Ajustes); embaixo, as abas Explorar, Filmes, Séries e Minha lista e um cartão de informação que reveza jogo, F1
   e manchete (jogo ao vivo fica fixo). ← → anda na linha; ↑ ↓ troca de linha.
-- **Minha lista:** OK num filme ou série → + Minha lista. Cada perfil tem a sua.
+- **Gêneros:** abaixo das abas, Tudo, Comédia, Ação, Drama, Terror… (só títulos dos seus apps). No Pesquisar, o
+  botão Gênero sem digitar nada lista o gênero inteiro.
+- **Vitrine:** o título em foco aparece grande (foto, resumo e "Assistir no app"); embaixo, 11 pôsteres por vez
+  com o ícone do app no canto.
+- **Minha lista:** OK num filme ou série → + Minha lista; na mesma página, "− Tirar da minha lista". Cada perfil
+  tem a sua.
 - **Fileira de apps:** ← → percorre, OK abre. Segurar OK num app muda ele de lugar (atalho; também há a ordem
   "Mais usados" nos Ajustes).
-- **▼ desce** para Entradas, TV ao vivo, clima, desempenho e ajustes da TV, anunciados no rodapé.
+- **▼ desce** para Entradas, TV ao vivo, Todos os apps, Loja LG, Adicionar app (põe na fileira), clima,
+  desempenho e ajustes, anunciados no rodapé.
+- **Ajustes** em seções: Perfil, Tela inicial, Tela de descanso, Filmes e séries, Celular e TV, Ajuda.
 - **OK num filme ou série** abre a página dele: Assistir no app certo, Trailer, + Minha lista, Voltar.
-- **Home** ou sair de um app nunca deixa a home da LG na tela: o Free My TV volta sozinho.
+- **Home** ou sair de um app nunca deixa a home da LG na tela: o Free My TV volta sozinho, no início.
 
 ## O que muda
 
@@ -34,14 +41,16 @@ Tudo à vista, sem gesto escondido (o padrão de Netflix e YouTube):
 | Apps | Abre no título: Netflix (Wikidata P1874) e Disney+ (P13902, formato da busca da LG); os demais na tela inicial | `web/data.js` |
 | Pesquisa | TMDB com filtros; tolera erro de digitação; nome de ator traz os trabalhos dele; seus apps primeiro | `web/data.js` |
 | Pesquisa | Resultados ao digitar; QR code para digitar pelo celular (porta 8770, código de 4 dígitos) | `web/home.js`, `webos/service/service.js` |
-| Explorar | Até 6 títulos, o que passa no Brasil primeiro, selo com o ícone do app, destaque girando | `web/data.js`, `web/home.js` |
+| Explorar | Vitrine do título em foco + 8 a 14 pôsteres (padrão 12), o que passa no Brasil primeiro, ícone do app no canto, destaque girando | `web/data.js`, `web/home.js` |
+| Explorar | Gêneros (TMDB discover por gênero, só nos provedores dos seus apps, guardado 6 h), na tela inicial e no Pesquisar | `web/data.js`, `web/home.js` |
+| Apps | Todos os apps lista tudo em ordem alfabética; Loja LG visível e com atalho; Adicionar app na fileira de baixo | `web/home.js`, `web/tv.js` |
 | Perfis | Ordem dos apps, tema, cor, fundo, modo infantil, lista, recentes, o que o cartão do topo mostra (jogos, F1, manchetes) e painel de desempenho | `web/home.js` |
 | Esportes | Times escolhidos pelo controle (ESPN), aviso de gol e lembrete 10 min antes, por cima de outros apps | `webos/service/service.js` |
 | Controles | Botão Controles: controle pelo celular, só o som (apaga a tela), timer que desliga a TV, teste de velocidade | `web/home.js`, `web/tv.js` |
 | Celular | Controle remoto completo (setas, OK, Voltar, Início, volume, play, digitar) em qualquer app; pareia uma vez pelo QR (porta 8770, token guardado) | `webos/service/service.js` |
 | TV | Painel de desempenho (CPU, RAM, swap, rede de `/proc`); manchetes do ge e g1 no topo | `webos/service/service.js` |
 | TV | Developer Mode renovado pela própria TV, uma vez por dia; backup das configurações; app como entrada | `webos/service/service.js`, `webos/backup.py` |
-| Memória | Fotos em 1280 px, liberadas ao sair; só o cartão em destaque guarda a foto grande; pesquisa e página do título soltam as imagens ao fechar | `web/home.js` |
+| Memória | Pôsteres em 185 px; só a vitrine guarda a foto de 1280 px (a camada escondida solta a dela); pesquisa e página do título soltam as imagens ao fechar | `web/home.js` |
 
 ## Instalar nesta TV
 

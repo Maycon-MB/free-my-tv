@@ -383,9 +383,11 @@
 
   // MARK: - Focus
 
-  var Z = {TOP: 'top', CARDS: 'cards', SHELF: 'shelf', DRAWER: 'drawer', APPS: 'apps', SETTINGS: 'settings', EDIT: 'edit', LANG: 'lang', CITY: 'city', KEY: 'key', ABOUT: 'about', SEARCH: 'search', TEAMS: 'teams', CTRL: 'ctrl', HELP: 'help', DETAIL: 'detail', PAIR: 'pair'};
+  var Z = {TOP: 'top', GENRE: 'genre', CARDS: 'cards', SHELF: 'shelf', DRAWER: 'drawer', APPS: 'apps', SETTINGS: 'settings', EDIT: 'edit', LANG: 'lang', CITY: 'city', KEY: 'key', ABOUT: 'about', SEARCH: 'search', TEAMS: 'teams', CTRL: 'ctrl', HELP: 'help', DETAIL: 'detail', PAIR: 'pair'};
   var st = {zone: Z.SHELF, top: 0, tab: 0, card: 0, shelf: 0, drawer: 0, grid: 0, row: 0, edit: 0, lang: 0, city: 0, key: 0};
   var cards = [];
+  var genreAt = 0, genreTimer = 0;   // the chip with focus; st.genre is the one applied
+  st.genre = 0;
 
   function sheetOpen() { return st.zone === Z.APPS || st.zone === Z.SETTINGS || st.zone === Z.EDIT || st.zone === Z.LANG || st.zone === Z.CITY || st.zone === Z.KEY || st.zone === Z.ABOUT || st.zone === Z.SEARCH || st.zone === Z.TEAMS || st.zone === Z.CTRL || st.zone === Z.HELP || st.zone === Z.DETAIL || st.zone === Z.PAIR; }
 
@@ -399,6 +401,11 @@
     list = $('buttons').children;
     for (i = 0; i < list.length; i++) setClass(list[i], 'focus', st.zone === Z.TOP && st.top === NTABS + i);
     setClass($('quotes'), 'hide', st.zone === Z.TOP && st.top >= NTABS);
+    list = $('genres').children;
+    for (i = 0; i < list.length; i++) {
+      setClass(list[i], 'on', i === st.genre);
+      setClass(list[i], 'focus', st.zone === Z.GENRE && genreAt === i);
+    }
     layoutCards();
     list = $('cards').children;
     for (i = 0; i < list.length; i++) setClass(list[i], 'focus', st.zone === Z.CARDS && st.card === i);
@@ -460,6 +467,7 @@
 
   function renderTop() {
     $('title').textContent = tr('For You');
+    renderGenres();
     var tabs = $('tabs');
     tabs.innerHTML = '';
     var names = [tr('Explore'), tr('Movies'), tr('Shows'), 'Minha lista'];
@@ -499,9 +507,8 @@
   // MARK: - Picks and background
 
   function renderCards() {
-    var list = TAB_KIND[st.tab] === 'mine' ? myList() : Data.picks(TAB_KIND[st.tab]);
-    var holder = $('cards');
-    setClass(body, 'no-picks', !list.length);
+    var list = cardList(), holder = $('cards');
+    setClass(body, 'no-picks', !list.length && !st.genre);
     setClass(body, 'no-key', !Data.hasKey());   // as on Android: no title or tabs that could never show anything
     if (!Data.hasKey() && st.zone === Z.TOP && st.top < NTABS) st.top = NTABS;
     var same = list.length === cards.length;
@@ -512,14 +519,12 @@
     for (var c = 0; c < list.length; c++) {
       var p = list[c], card = el('div', 'card', holder);
       var img = el('div', 'img', card);
-      // Narrow: the poster (the backdrop cropped without one); the wide card fades its backdrop in over it, loaded then.
+      // Posters only (TMDB's w185, light on memory); the focused title's photo is the showcase above the row.
       var poster = el('div', 'layer', img);
-      poster.style.backgroundImage = 'url("' + (p.poster ? Data.image(p.poster, 'w342') : Data.image(p.backdrop, 'w780')) + '")';
-      el('div', 'layer back', img);
+      poster.style.backgroundImage = 'url("' + (p.poster ? Data.image(p.poster, 'w185') : Data.image(p.backdrop, 'w300')) + '")';
+      if (!p.poster) el('div', 'pname', img, p.title);
       if (p.service) serviceBadge(p, img);
       if (p.kind === 'tv' && TAB_KIND[st.tab] === 'mine') episodeBadge(p, img);
-      el('div', 'name', card, p.title);
-      if (p.meta) el('div', 'meta', card, p.meta);
       hover(card, Z.CARDS, c);
       holdable(card);
     }
@@ -527,6 +532,90 @@
     if (!list.length && st.zone === Z.CARDS) st.zone = Z.SHELF;
     backdrop(list.length ? Data.image(list[st.card].backdrop, 'w300') : '');
     updateFocus();
+    heroArt();
+  }
+
+  /** The row's titles: the tab's picks, or the chosen genre's (fetched once, then kept for 6 hours). */
+  function cardList() {
+    var kind = TAB_KIND[st.tab], g = Data.GENRES[st.genre];
+    if (kind === 'mine') {
+      return myList().filter(function (p) {
+        return !st.genre || (p.genres || []).indexOf(g.name) >= 0 || (p.meta || '').indexOf(g.name) >= 0;
+      });
+    }
+    if (!st.genre) return Data.picks(kind);
+    var hit = Data.genreNow(kind, g);
+    if (hit) return hit;
+    heroWait = 'Procurando ' + g.name.toLowerCase() + ' nos seus apps…';
+    Data.byGenre(kind, g, function () {
+      heroWait = '';
+      if (Data.GENRES[st.genre] === g && TAB_KIND[st.tab] === kind) renderCards();
+    });
+    return [];
+  }
+
+  // MARK: - Showcase: the focused title large, its photo bleeding in from the right, its name and where it streams
+
+  var heroWait = '', heroUrl = '', heroFront = 'heroA';
+
+  function showHero() {
+    var box = $('herotext'), p = cards[Math.min(st.card, cards.length - 1)];
+    if (!box) return;
+    box.innerHTML = '';
+    if (!p) {
+      if (st.genre) el('div', 'hwait', box, heroWait || 'Nada de ' + Data.GENRES[st.genre].name.toLowerCase() + ' nos seus apps agora.');
+      return;
+    }
+    el('div', 'htitle', box, p.title);
+    var about = (p.meta || '').replace(' · ' + p.service, '').replace(p.service, '');
+    el('div', 'hmeta', box, [p.year, about].filter(function (x) { return x; }).join(' · '));
+    if (p.overview) el('div', 'hover', box, p.overview);
+    var app = p.app && Data.appFor(p.app);
+    if (p.service) {
+      var where = el('div', 'hwhere' + (app ? '' : ' off'), box);
+      if (app) serviceBadge(p, where);
+      el('span', '', where, app ? 'Assistir no ' + p.service : 'Na ' + p.service + ' (app não instalado)');
+    }
+  }
+
+  /** The focused title's photo, once the focus rests: two layers cross-fade, the hidden one lets its photo go. */
+  function heroArt() {
+    var p = cards[Math.min(st.card, cards.length - 1)], url = p && p.backdrop ? Data.image(p.backdrop, 'w1280') : '';
+    if (url === heroUrl) return;
+    heroUrl = url;
+    var next = heroFront === 'heroA' ? 'heroB' : 'heroA', old = $(heroFront);
+    setClass(old, 'on', false);
+    setTimeout(function () { if (!/\bon\b/.test(old.className)) old.style.backgroundImage = 'none'; }, 700);
+    if (!url) return;
+    var img = new Image();
+    img.onload = function () {
+      if (heroUrl !== url) return;
+      $(next).style.backgroundImage = 'url("' + url + '")';
+      setClass($(next), 'on', true);
+      heroFront = next;
+    };
+    img.src = url;
+  }
+
+  function renderGenres() {
+    var box = $('genres');
+    box.innerHTML = '';
+    for (var i = 0; i < Data.GENRES.length; i++) hover(el('div', 'genre', box, Data.GENRES[i].name), Z.GENRE, i);
+  }
+
+  /** A chip applies once the focus rests on it, as the tabs do (a run along the row fetches nothing). */
+  function genreSoon() {
+    clearTimeout(genreTimer);
+    genreTimer = setTimeout(applyGenre, 450);
+  }
+
+  function applyGenre() {
+    clearTimeout(genreTimer);
+    if (genreAt === st.genre) return;
+    st.genre = genreAt;
+    st.card = 0;
+    renderCards();
+    layoutCards();
   }
 
   /**
@@ -534,35 +623,16 @@
    * row scrolls a card at a time (the holder slides), and the cards at the edges lose their text. Only the holder's
    * transform and the backdrop's opacity animate: the widths change at once (older TVs).
    */
+  var POSTER_STEP = 160, POSTERS_SEEN = 11;
+
   function layoutCards() {
-    var holder = $('cards'), nodes = holder.children, left = 80, scroll = Math.max(0, st.card - 2) * 360;
-    for (var i = 0; i < nodes.length; i++) {
-      var wide = i === st.card, w = wide ? 1040 : 320, n = nodes[i], at = left - scroll;
-      n.style.left = left + 'px';
-      n.style.width = w + 'px';
-      setClass(n, 'wide', wide);
-      setClass(n, 'edge', at < 0 || at > 1740);
-      if (wide && !n.getAttribute('data-back') && cards[i]) {
-        n.setAttribute('data-back', '1');
-        n.querySelector('.back').style.backgroundImage = 'url("' + Data.image(cards[i].backdrop, 'w1280') + '")';
-      } else if (!wide && n.getAttribute('data-back')) {
-        // Only the wide card keeps its 1280 px photo (~3.7 MB decoded): with the rotation, all six would.
-        n.removeAttribute('data-back');
-        dropBack(n.querySelector('.back'));
-      }
-      left += w + 40;
-    }
+    var holder = $('cards'), nodes = holder.children, scroll = Math.max(0, st.card - (POSTERS_SEEN - 2)) * POSTER_STEP;
+    for (var i = 0; i < nodes.length; i++) nodes[i].style.left = (80 + i * POSTER_STEP) + 'px';
     holder.style.webkitTransform = holder.style.transform = 'translateX(' + (-scroll) + 'px)';
+    showHero();
   }
 
   var bgUrl = null, bgFront = 'bgA';
-
-  /** After its fade-out (0.3 s), a narrow card's photo goes, unless the card turned wide again meanwhile. */
-  function dropBack(layer) {
-    setTimeout(function () {
-      if (layer.parentNode && !layer.parentNode.parentNode.getAttribute('data-back')) layer.style.backgroundImage = 'none';
-    }, 400);
-  }
 
   /** The focused pick's photo as the background: drawn tiny and stretched, it's already as soft as a heavy blur. */
   function backdrop(url) {
@@ -594,6 +664,7 @@
     clearTimeout(bgTimer);
     bgTimer = setTimeout(function () {
       if (cards.length) backdrop(Data.image(cards[Math.min(st.card, cards.length - 1)].backdrop, 'w300'));
+      heroArt();
     }, BG_FOLLOW_MS);
   }
 
@@ -1419,8 +1490,9 @@
   function srGenres() {
     var out = [];
     for (var i = 0; i < srAll.length; i++) {
-      for (var g = 0; g < srAll[i].genres.length; g++) {
-        if (out.indexOf(srAll[i].genres[g]) < 0) out.push(srAll[i].genres[g]);
+      var gs = srAll[i].genres || [];
+      for (var g = 0; g < gs.length; g++) {
+        if (out.indexOf(gs[g]) < 0) out.push(gs[g]);
       }
     }
     return out.sort();
@@ -1433,20 +1505,45 @@
   }
 
   function srFilter() {
-    var genre = srGenre ? srGenres()[srGenre - 1] : null;
+    var genre = srGenre && !browsing() ? srGenres()[srGenre - 1] : null;
     srShown = srAll.filter(function (p) {
       if (srKind === 1 && p.kind !== 'movie') return false;
       if (srKind === 2 && p.kind !== 'tv') return false;
       if (srMine && !(p.app && Data.usable(p.app))) return false;
-      return !genre || p.genres.indexOf(genre) >= 0;
+      return !genre || browsing() || (p.genres || []).indexOf(genre) >= 0;
     });
     srItem = Math.min(srItem, Math.max(0, srShown.length - 1));
   }
 
   function chipLabels() {
-    var genres = srGenres();
-    return [['Tudo', 'Filmes', 'Séries'][srKind], (srMine ? '✓ ' : '') + 'Só meus apps',
-      'Gênero: ' + (srGenre ? genres[srGenre - 1] : 'todos')];
+    var genre = !srGenre ? 'todos' : browsing() ? Data.GENRES[srGenre].name : srGenres()[srGenre - 1];
+    return [['Tudo', 'Filmes', 'Séries'][srKind], (srMine ? '✓ ' : '') + 'Só meus apps', 'Gênero: ' + genre];
+  }
+
+  // Nothing typed: the Genre chip browses a genre on the TV's apps (Data.GENRES); after a search it filters the results.
+  function browsing() { return !srQuery; }
+
+  function browseGenre() {
+    if (!srGenre) {
+      srAll = Prefs.get('recent', []);
+      srFilter();
+      srStatus = srAll.length ? 'Abertos recentemente · digite ou escolha um gênero' : '';
+      renderSearch();
+      return;
+    }
+    var g = Data.GENRES[srGenre], kind = [null, 'movie', 'tv'][srKind];
+    srAll = [];
+    srFilter();
+    srStatus = 'Procurando ' + g.name.toLowerCase() + ' nos seus apps…';
+    renderSearch();
+    Data.byGenre(kind, g, function (list) {
+      if (st.zone !== Z.SEARCH || !browsing() || Data.GENRES[srGenre] !== g) return;
+      srAll = list;
+      srItem = 0;
+      srFilter();
+      srStatus = srCount();
+      renderSearch();
+    });
   }
 
   function renderSearch() {
@@ -1540,7 +1637,7 @@
     srMine = false;
     srGenre = 0;
     srFilter();
-    srStatus = srAll.length ? 'Abertos recentemente · digite para pesquisar' : '';
+    srStatus = srAll.length ? 'Abertos recentemente · digite ou escolha um gênero' : '';
     if (!Data.hasKey()) srStatus = 'A pesquisa usa a chave do TMDB: configure em Configurações da Home.';
     renderSearch();
     setClass($('searchpage'), 'open', true);
@@ -1613,6 +1710,12 @@
   function activateSearch() {
     if (srPart === 0) { openField('searchpage'); return; }
     if (srPart === 1) {
+      if (browsing() && (srChip === 2 || (srChip === 0 && srGenre))) {
+        if (srChip === 2) srGenre = (srGenre + 1) % Data.GENRES.length;
+        else srKind = (srKind + 1) % 3;
+        browseGenre();
+        return;
+      }
       if (srChip === 0) srKind = (srKind + 1) % 3;
       else if (srChip === 1) srMine = !srMine;
       else srGenre = (srGenre + 1) % (srGenres().length + 1);
@@ -1846,7 +1949,7 @@
       {label: tr('Screensaver'), value: saverMode() === 'clock' ? tr('Clock') : tr('Photos'),
         step: function (d) { cycle('saver', ['photos', 'clock'], saverMode(), d); }},
       {label: tr('Picks per tab'), value: String(Prefs.cards()),
-        step: function (d) { Prefs.set('cards', 3 + (Prefs.cards() - 3 + (d || 1) + 4) % 4); renderCards(); }},
+        step: function (d) { Prefs.set('cards', 8 + (Prefs.cards() - 8 + 2 * (d || 1) + 8) % 8); renderCards(); }},
       {label: tr('Cartoons and anime'), toggle: !Prefs.hideAnimation(),
         step: function () { Prefs.set('hideAnimation', !Prefs.hideAnimation()); Data.refresh(); }},
       {label: 'Times', value: followed().map(function (t) { return t.name; }).join(', ') || 'nenhum', opens: true,
@@ -2639,6 +2742,10 @@
       case Z.CARDS:
         if (cards[st.card]) openDetail(cards[st.card]);
         return;
+      case Z.GENRE:
+        applyGenre();
+        if (cards.length) { st.zone = Z.CARDS; st.card = 0; updateFocus(); }
+        return;
       case Z.SHELF:
         if (shelf[st.shelf]) launcher(shelf[st.shelf].id, shelf[st.shelf].title)();
         return;
@@ -2709,13 +2816,19 @@
         else if (dy > 0) { openDrawer(); return; }   // the next row: its header shows at the bottom of the screen
         else if (dy < 0) {
           if (cards.length) { st.zone = Z.CARDS; st.card = nearest(cardNodes, centerX(tiles[st.shelf])); }
-          else { st.zone = Z.TOP; st.top = Data.hasKey() ? st.tab : NTABS + 1; }
+          else if (Data.hasKey()) { st.zone = Z.GENRE; genreAt = st.genre; }
+          else { st.zone = Z.TOP; st.top = NTABS + 1; }
         }
         break;
       case Z.CARDS:
         if (dx) st.card = Math.max(0, Math.min(cards.length - 1, st.card + dx));
-        else if (dy < 0) { st.zone = Z.TOP; st.top = st.tab; }
+        else if (dy < 0) { st.zone = Z.GENRE; genreAt = st.genre; }
         else if (shelf.length) { st.zone = Z.SHELF; st.shelf = nearest(tiles, centerX(cardNodes[st.card])); }
+        break;
+      case Z.GENRE:
+        if (dx) { genreAt = Math.max(0, Math.min(Data.GENRES.length - 1, genreAt + dx)); genreSoon(); }
+        else if (dy < 0) { applyGenre(); st.zone = Z.TOP; st.top = st.tab; }
+        else { applyGenre(); if (cards.length) { st.zone = Z.CARDS; st.card = 0; } else if (shelf.length) st.zone = Z.SHELF; }
         break;
       case Z.TOP:
         // Two rows: the menu above (network, search, controls, settings) and the tabs; ↑ ↓ moves between them,
@@ -2726,7 +2839,7 @@
         else if (dy < 0 && !inMenu) { lastTab = st.top; st.top = NTABS + 1; }   // up to the menu, on Search
         else if (dy > 0 && inMenu && tabs) st.top = lastTab;
         else if (dy > 0) {
-          if (cards.length) { st.zone = Z.CARDS; st.card = 0; }
+          if (tabs) { st.zone = Z.GENRE; genreAt = st.genre; }
           else st.zone = Z.SHELF;
         }
         break;
@@ -2813,6 +2926,7 @@
       st.zone = zone;
       if (zone === Z.TOP) { st.top = index; if (index < NTABS) selectTab(index); }
       else if (zone === Z.CARDS) st.card = index;
+      else if (zone === Z.GENRE) { genreAt = index; genreSoon(); }
       else if (zone === Z.SHELF) st.shelf = index;
       else if (zone === Z.DRAWER) st.drawer = index;
       else if (zone === Z.APPS) st.grid = index;

@@ -581,3 +581,61 @@ body:not(.night) #morehint { color: #6E6E73; }
 /* The hint sits bottom left, out of the way of the focused app's name; it fades when the name reaches it. */
 #morehint { left: 80px; right: auto; text-align: left; -webkit-transition: opacity 0.15s; transition: opacity 0.15s; }
 #morehint.away { opacity: 0; }
+
+/* MARK: - Showcase: the focused title's photo comes in from the right and melts into the dark on the left and
+   below, where its name, what it is and where it streams sit. The row under it is posters only, 11 in view. */
+#hero { position: absolute; left: 0; top: 0; width: 1920px; height: 812px; }
+#hero .art {
+  position: absolute; right: 0; top: 0; width: 1300px; height: 731px;
+  background-size: cover; background-position: center top;
+  opacity: 0; -webkit-transition: opacity 0.6s; transition: opacity 0.6s;
+}
+#hero .art.on { opacity: 1; }
+#hero .fade {
+  position: absolute; right: 0; top: 0; width: 1302px; height: 732px;
+  background: -webkit-linear-gradient(left, #0B0B0D 0%, rgba(11, 11, 13, 0.82) 24%, rgba(11, 11, 13, 0) 62%),
+    -webkit-linear-gradient(bottom, #0B0B0D 0%, rgba(11, 11, 13, 0.6) 30%, rgba(11, 11, 13, 0) 58%),
+    -webkit-linear-gradient(top, rgba(11, 11, 13, 0.7) 0%, rgba(11, 11, 13, 0) 30%);
+  background: linear-gradient(90deg, #0B0B0D 0%, rgba(11, 11, 13, 0.82) 24%, rgba(11, 11, 13, 0) 62%),
+    linear-gradient(0deg, #0B0B0D 0%, rgba(11, 11, 13, 0.6) 30%, rgba(11, 11, 13, 0) 58%),
+    linear-gradient(180deg, rgba(11, 11, 13, 0.7) 0%, rgba(11, 11, 13, 0) 30%);
+}
+.no-picks #hero, .no-key #hero, .no-key #genres { display: none; }
+#herotext { position: absolute; left: 80px; top: 312px; width: 820px; font-family: 'Inter', sans-serif; }
+#herotext .htitle {
+  font-size: 60px; font-weight: 800; line-height: 68px; letter-spacing: -0.02em; color: #F5F5F7;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#herotext .hmeta { margin-top: 8px; font-size: 26px; font-weight: 600; color: #A1A1AA; white-space: nowrap; }
+#herotext .hover { margin-top: 12px; width: 760px; max-height: 68px; overflow: hidden; font-size: 24px; line-height: 34px; color: #C8C8D0; }
+#herotext .hwhere { display: inline-block; margin-top: 16px; height: 48px; line-height: 48px; font-size: 26px; font-weight: 700; color: #F5F5F7; white-space: nowrap; }
+#herotext .hwhere.off { color: #8C8C96; font-weight: 600; }
+#herotext .hwhere .badge {
+  position: relative; left: 0; top: 0; display: inline-block; vertical-align: top; margin-right: 14px;
+  width: 48px; height: 48px; padding: 0; border-radius: 12px; overflow: hidden;
+}
+#herotext .hwhere .badge img { width: 48px; height: 48px; }
+#herotext .hwhere .badge.netflix img { width: 26px; height: 40px; margin: 4px 11px; }
+#herotext .hwhere .badge.word { width: auto; padding: 0 12px; }
+#herotext .hwait { padding-top: 60px; font-size: 34px; font-weight: 600; color: #A1A1AA; }
+
+/* Genres under the tabs: as the tabs, the applied one is white, the focused one a red pill. */
+#genres { position: absolute; left: 62px; top: 240px; height: 52px; white-space: nowrap; font-family: 'Inter', sans-serif; }
+#genres .genre {
+  display: inline-block; height: 52px; line-height: 52px; padding: 0 20px; margin-right: 4px; border-radius: 26px;
+  font-size: 25px; font-weight: 600; color: #8C8C96;
+}
+#genres .genre.on { color: #F5F5F7; }
+.night #genres .genre.focus { background: #E5484D; color: #FFF; }
+
+/* Posters: one size; the focused one rises a little and its edge lights up in the accent. */
+.card { top: 580px; width: 140px; height: 210px; }
+.card .img { border-radius: 12px; }
+.card .img::after { border-radius: 12px; }
+.card.focus { -webkit-transform: translateY(-6px) scale(1.08); transform: translateY(-6px) scale(1.08); }
+.card .badge { left: 8px; top: auto; bottom: 8px; width: 40px; height: 40px; border-radius: 10px; }
+.card .badge img { width: 40px; height: 40px; }
+.card .badge.netflix img { width: 22px; height: 34px; margin: 3px 9px; }
+.card .badge.word { width: auto; height: 30px; padding: 0 8px; font-size: 13px; line-height: 30px; }
+.card .epbadge { left: 6px; right: 6px; top: 6px; bottom: auto; height: 30px; padding: 0 8px; font-size: 15px; line-height: 30px; border-radius: 15px; overflow: hidden; text-overflow: ellipsis; }
+.card .pname { position: absolute; left: 10px; right: 10px; top: 14px; font-size: 20px; font-weight: 700; color: #F5F5F7; }
