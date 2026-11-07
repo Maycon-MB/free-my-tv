@@ -559,3 +559,16 @@ body:not(.night) #morehint { color: #6E6E73; }
 }
 #pairing .qrbig { display: block; width: 440px; height: 440px; margin: 10px auto 18px; border-radius: 18px; }
 #pairing .hint { font-size: 24px; line-height: 1.4; color: #B4B4BC; }
+
+/* The info slot: its cards take turns, one shown (.on) at a time, fading in. */
+#football .match { display: none; opacity: 0; -webkit-transition: opacity 0.4s; transition: opacity 0.4s; }
+#football .match.on { display: inline-block; opacity: 1; }
+#football { max-width: 1110px; }
+#football .news { max-width: 1060px; overflow: hidden; text-overflow: ellipsis; padding-left: 22px; }
+#football .news .src { font-size: 22px; font-weight: 800; color: #FF7A7F; margin-right: 12px; }
+#football .news .headline { font-size: 24px; font-weight: 500; color: #D4D4DA; }
+#football .when { text-transform: none; letter-spacing: 0.02em; }
+
+/* Words in Inter, sentence case: capitals spaced out read worse from the couch. Mono stays for numbers. */
+#tilename { font-family: 'Inter', sans-serif; text-transform: none; letter-spacing: 0; font-size: 26px; font-weight: 700; }
+#morehint { font-family: 'Inter', sans-serif; text-transform: none; letter-spacing: 0; font-size: 23px; font-weight: 600; }

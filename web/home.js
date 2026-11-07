@@ -441,6 +441,7 @@
 
   // Explore, Movies, Shows, then My list (saved and recently opened, kept per profile).
   var TAB_KIND = [null, 'movie', 'tv', 'mine'], NTABS = TAB_KIND.length;
+  var lastTab = 0;   // the tab ↓ from the menu returns to
 
   function renderTop() {
     $('title').textContent = tr('For You');
@@ -770,7 +771,7 @@
 
   // MARK: - Profiles: each keeps its own shelf order, theme, accent color and kids mode
 
-  var PROFILE_KEYS = ['shelf', 'theme', 'accent', 'kids', 'helped', 'mylist', 'recent', 'extras', 'showPerf', 'bg', 'starsMove'];
+  var PROFILE_KEYS = ['shelf', 'theme', 'accent', 'kids', 'mylist', 'recent', 'extras', 'showPerf', 'bg', 'starsMove'];
   var PROFILE_NAMES = ['Maycon', 'Família', 'Crianças', 'Visitas', 'Convidado'];
   var ACCENTS = [['red', 'Vermelho'], ['pink', 'Rosa'], ['blue', 'Azul'], ['green', 'Verde'], ['purple', 'Roxo'],
     ['orange', 'Laranja'], ['yellow', 'Amarelo']];
@@ -914,7 +915,10 @@
   var dtTitle = null, dtFrom = null, dtButton = 0;
 
   function detailButtons() {
-    var p = dtTitle, out = [], keys = (p && (p.apps || (p.app ? [p.app] : []))) || [];
+    var p = dtTitle, out = [], keys = (p && (p.apps || (p.app ? [p.app] : []))) || [], via = p && pickTarget(p);
+    if (via && via.params) {   // Home Settings > Open picks in Nuvio: its own link first
+      out.push({label: '▶  Assistir no ' + via.app.title, run: function () { closeDetail(); launcher(via.app.id, via.app.title, via.params)(); }});
+    }
     for (var i = 0; i < keys.length && out.length < 3; i++) {
       (function (key) {
         var app = Data.appFor(key);
@@ -939,6 +943,7 @@
   }
 
   function openDetail(p) {
+    if (!p) return;
     var page = $('detail'), app = p.app && Data.appFor(p.app);
     dtTitle = p;
     dtFrom = st.zone;
@@ -952,7 +957,8 @@
     var count = (p.apps || []).length;
     var where = app ? (count > 1 ? 'Em ' + count + ' dos seus apps' : 'No ' + app.title)
       : p.service ? 'Na ' + p.service + ' (app não instalado)' : p.paid ? p.paid : 'Sem streaming no Brasil';
-    var about = (p.meta || (p.genres || []).slice(0, 2).join(' · ')).replace(' · ' + p.service, '');   // the service is in 'where'
+    var about = p.meta || (p.genres || []).slice(0, 2).join(' · ');
+    if (p.service) about = about.replace(' · ' + p.service, '');   // the service is in 'where'
     el('div', 'dmeta', info, [p.year, about, where].filter(function (x) { return x; }).join('  ·  '));
     if (p.kind === 'tv') {
       Data.episodes(p, function (n) {
@@ -974,7 +980,7 @@
     updateFocus();
   }
 
-  // MARK: - Help: where everything is, shown once per profile and again from Home Settings
+  // MARK: - Help: where everything is, from Home Settings
 
   var HELP_ROWS = [
     ['Apps', 'na fileira de baixo; ← → percorre, OK abre'],
@@ -1006,7 +1012,6 @@
 
   function closeHelp() {
     setClass($('help'), 'open', false);
-    Prefs.set('helped', true);
     st.zone = Z.SHELF;
     updateFocus();
   }
@@ -1105,16 +1110,28 @@
 
   function money(v) { return v ? v.toFixed(2).replace('.', ',') : '—'; }
 
+  /** The headline's card in the info slot, refreshed with the next headline each time the slot comes back to it. */
   function showNews() {
-    var box = $('news');
-    if (!box || document.hidden) return;
-    box.innerHTML = '';
-    if (news.length) {
-      var h = news[newsAt++ % news.length];
-      el('span', 'src', box, h.source);
-      el('span', 'title', box, h.title);
-    }
-    if (rates && rates.USD) el('span', 'rates', box, 'USD ' + money(rates.USD) + '  ·  EUR ' + money(rates.EUR));
+    var box = $('football'), card = $('newscard');
+    if (!box || !news.length) { if (card) card.parentNode.removeChild(card); return; }
+    if (!card) { card = el('div', 'match news', box); card.id = 'newscard'; }
+    var h = news[newsAt++ % news.length];
+    card.innerHTML = '';
+    el('span', 'src', card, h.source === 'GE' ? 'ge' : 'g1');
+    el('span', 'headline', card, h.title);
+  }
+
+  // One info slot beside the tabs: the match, the next Grand Prix and a headline take turns there, one at a time,
+  // so nothing overlaps the tabs. A live match stays put.
+  var INFO_TURN = 8000, infoAt = 0;
+
+  function rotateInfo() {
+    var cards = $('football').children, live = null, i;
+    if (!cards.length || document.hidden) return;
+    for (i = 0; i < cards.length; i++) if (/\blive\b/.test(cards[i].className)) live = cards[i];
+    var shown = live || cards[infoAt++ % cards.length];
+    if (shown.id === 'newscard' && !live) showNews();
+    for (i = 0; i < cards.length; i++) setClass(cards[i], 'on', cards[i] === shown);
   }
 
   function pollInfo() {
@@ -1192,7 +1209,7 @@
   // Followed teams (ESPN ids, league slug as in its API), picked in Home Settings; Flamengo until then.
   function followed() { return Prefs.get('teams', [{league: 'bra.1', id: '819', name: 'Flamengo'}]); }
   var FOOTBALL_EVERY = 5 * 60000, FOOTBALL_LIVE_EVERY = 60000, footballTimer = 0;
-  var WEEKDAYS = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
+  var WEEKDAYS = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
 
   function teamLogo(id) {
     return 'https://a.espncdn.com/combiner/i?img=/i/teamlogos/soccer/500/' + id + '.png&w=56&h=56';
@@ -1225,7 +1242,7 @@
       el('img', '', chip).src = teamLogo(m.away.id);
       var d = new Date(m.date), when;
       if (m.state === 'in') when = '● ' + m.clock;
-      else if (m.state === 'post') when = 'FIM · ' + two(d.getDate()) + '/' + two(d.getMonth() + 1);
+      else if (m.state === 'post') when = 'fim, ' + two(d.getDate()) + '/' + two(d.getMonth() + 1);
       else when = WEEKDAYS[d.getDay()] + ' ' + two(d.getDate()) + '/' + two(d.getMonth() + 1) + ' ' + two(d.getHours()) + ':' + two(d.getMinutes());
       el('span', 'when', chip, when);
     }
@@ -1241,7 +1258,9 @@
     if (soon && soon.state === 'pre' && soon.home && soon.away) {
       TV.service('remind', {date: soon.date, text: soon.home.abbr + ' × ' + soon.away.abbr + ' começa em 10 minutos'});
     }
-    if (f1Race) footballChip(box, 'F1 · GP ' + f1Race.name, f1When(f1Race.date));
+    if (f1Race) footballChip(box, 'F1, GP ' + f1Race.name, f1When(f1Race.date));
+    showNews();
+    rotateInfo();
   }
 
   var f1Race = null;
@@ -2540,7 +2559,7 @@
         else openSettings();
         return;
       case Z.CARDS:
-        openDetail(cards[st.card]);
+        if (cards[st.card]) openDetail(cards[st.card]);
         return;
       case Z.SHELF:
         if (shelf[st.shelf]) launcher(shelf[st.shelf].id, shelf[st.shelf].title)();
@@ -2612,7 +2631,7 @@
         else if (dy > 0) { openDrawer(); return; }   // the next row: its header shows at the bottom of the screen
         else if (dy < 0) {
           if (cards.length) { st.zone = Z.CARDS; st.card = nearest(cardNodes, centerX(tiles[st.shelf])); }
-          else { st.zone = Z.TOP; st.top = Data.hasKey() ? st.tab : NTABS; }
+          else { st.zone = Z.TOP; st.top = Data.hasKey() ? st.tab : NTABS + 1; }
         }
         break;
       case Z.CARDS:
@@ -2621,11 +2640,15 @@
         else if (shelf.length) { st.zone = Z.SHELF; st.shelf = nearest(tiles, centerX(cardNodes[st.card])); }
         break;
       case Z.TOP:
-        if (dx) {
-          st.top = Math.max(Data.hasKey() ? 0 : NTABS, Math.min(NTABS + 3, st.top + dx));   // without the picks the tabs can't hold focus
-          if (st.top < NTABS) selectTab(st.top);   // as on Apple TV: focusing a tab selects it
-        } else if (dy > 0) {
-          if (cards.length) { st.zone = Z.CARDS; st.card = Math.min(cards.length - 1, st.top < NTABS ? 0 : cards.length - 1); }
+        // Two rows: the menu above (network, search, controls, settings) and the tabs; ↑ ↓ moves between them,
+        // ← → stays in the row. Without the picks there are no tabs, only the menu.
+        var inMenu = st.top >= NTABS, tabs = Data.hasKey();
+        if (dx && inMenu) st.top = Math.max(NTABS, Math.min(NTABS + 3, st.top + dx));
+        else if (dx) { st.top = Math.max(0, Math.min(NTABS - 1, st.top + dx)); selectTab(st.top); }
+        else if (dy < 0 && !inMenu) { lastTab = st.top; st.top = NTABS + 1; }   // up to the menu, on Search
+        else if (dy > 0 && inMenu && tabs) st.top = lastTab;
+        else if (dy > 0) {
+          if (cards.length) { st.zone = Z.CARDS; st.card = 0; }
           else st.zone = Z.SHELF;
         }
         break;
@@ -3022,7 +3045,7 @@
   pollStats();
   pollInfo();
   setInterval(pollInfo, INFO_EVERY);
-  setInterval(showNews, NEWS_EVERY);
+  setInterval(rotateInfo, INFO_TURN);
   setInterval(pollF1, 6 * 3600000);
   setInterval(rotatePick, ROTATE_EVERY);
   renewDevMode();

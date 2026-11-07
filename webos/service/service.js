@@ -487,7 +487,7 @@ service.register('remind', function (message) {
 
 // MARK: - The phone: a page on the home network that is a remote control (any app, through the TV's own pointer
 // input) and types text (into Free My TV's search when open, else into the field the app in front has). A phone
-// pairs once with the 4-digit code shown on the TV; its token is kept, so it isn't asked again.
+// pairs once with the 6-digit code shown on the TV; its token is kept, so it isn't asked again.
 
 var http = require('http'), os = require('os'), crypto = require('crypto');
 var PHONES = '/media/developer/temp/freemytv-phones.json';
@@ -559,8 +559,9 @@ function forgetPhones() {
 
 /** A WebSocket to a path on the TV's remote control server (the pointer input socket), text frames out only. */
 function wsOpen(url, onEnd) {
-  var m = /^wss?:\/\/[^\/]+(\/.*)$/.exec(url || ''), socket = net.connect(3000, '127.0.0.1'), open = false, queue = [];
+  var m = /^wss?:\/\/[^\/]+(\/.*)$/.exec(url || '');
   if (!m) { onEnd(); return null; }
+  var socket = net.connect(3000, '127.0.0.1'), open = false, queue = [];
   socket.on('connect', function () {
     socket.write('GET ' + m[1] + ' HTTP/1.1\r\nHost: 127.0.0.1:3000\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n' +
         'Sec-WebSocket-Version: 13\r\nSec-WebSocket-Key: ZnJlZW15dHYtcG9pbnRlcg==\r\n\r\n');
@@ -582,12 +583,18 @@ var KEYS = ['UP', 'DOWN', 'LEFT', 'RIGHT', 'ENTER', 'BACK', 'HOME', 'VOLUMEUP', 
 /** A remote button, as if pressed on the remote: works on any app in front. */
 function pressKey(name) {
   if (KEYS.indexOf(name) < 0 || !lastKey) return;
-  if (phone.pointer) { phone.pointer.send('type:button\nname:' + name + '\n\n'); return; }
+  var press = 'type:button\nname:' + name + '\n\n';
+  if (phone.pointer) { phone.pointer.send(press); return; }
+  phone.waiting = (phone.waiting || []).concat([press]).slice(-10);   // pressed while the socket opens
+  if (phone.opening) return;
+  phone.opening = true;
   call('com.webos.service.networkinput/getPointerInputSocket', lastKey, {}, function (res) {
-    var path = res && res.payload && res.payload.socketPath;
-    if (!path || phone.pointer) return;
+    var path = res && res.payload && res.payload.socketPath, queued = phone.waiting || [];
+    phone.opening = false;
+    phone.waiting = [];
+    if (!path) return;
     phone.pointer = wsOpen(path, function () { phone.pointer = null; });
-    if (phone.pointer) phone.pointer.send('type:button\nname:' + name + '\n\n');
+    for (var i = 0; phone.pointer && i < queued.length; i++) phone.pointer.send(queued[i]);
   });
 }
 
@@ -607,8 +614,9 @@ var REMOTE_PAGE = '<!doctype html><meta name=viewport content="width=device-widt
   'text-transform:uppercase;margin:4px 0}</style><h1>Controle da TV</h1>' +
   '<div class=pad><span></span><button data-k=UP>▲</button><span></span><button data-k=LEFT>◀</button>' +
   '<button class=ok data-k=ENTER>OK</button><button data-k=RIGHT>▶</button><span></span><button data-k=DOWN>▼</button>' +
-  '<span></span></div><div class=row><button data-k=BACK>Voltar</button><button data-k=HOME>Início</button>' +
-  '<button data-k=PLAY>▶ / ❚❚</button></div><div class=row><button data-k=VOLUMEDOWN>Vol −</button>' +
+  '<span></span></div><div class=row><button data-k=BACK>Voltar</button><button data-k=HOME>Início</button></div>' +
+  '<div class=row>' +
+  '<button data-k=PLAY>▶</button><button data-k=PAUSE>❚❚</button></div><div class=row><button data-k=VOLUMEDOWN>Vol −</button>' +
   '<button data-k=MUTE>Mudo</button><button data-k=VOLUMEUP>Vol +</button></div>' +
   '<form id=t><input name=q placeholder="Digitar na TV" autocomplete=off><button>Enviar</button></form><script>' +
   'function post(p,b){return fetch(p,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:b})}' +
@@ -630,7 +638,8 @@ function body(req, done) {
 }
 
 function startServer() {
-  if (phone.server) return;
+  if (phone.server && phone.host === lanAddress() + ':' + phone.port) return;
+  if (phone.server) { phone.server.close(); phone.server = null; }   // the TV's address changed: listen on the new one
   phone.server = http.createServer(function (req, res) {
     var path = (req.url || '/').split('?')[0], origin = req.headers.origin;
     // Only this TV's address as Host (no DNS rebinding), only the home network, and posts only from this page.
@@ -664,7 +673,7 @@ function startServer() {
       });
       return;
     }
-    // The QR code's link carries the code (?c=1234): the phone pairs by opening it.
+    // The QR code's link carries the code (?c=123456): the phone pairs by opening it.
     var given = /[?&]c=(\d{6})(&|$)/.exec(req.url || '');
     if (!pairedBy(req) && given && pair(given[1], req, res)) { res.writeHead(303, {Location: '/'}); res.end(); return; }
     page(pairedBy(req) ? REMOTE_PAGE : PAIR_PAGE.replace('%MSG%', 'Digite o código que aparece na TV.'));
@@ -685,6 +694,7 @@ service.register('phone', function (message) {
   var p = message.payload || {}, url = 'http://' + lanAddress() + ':' + phone.port;
   if (p.clientKey) lastKey = p.clientKey;
   if (p.action === 'remote') {
+    phone.remoteOn = !!p.on;
     if (p.on) startServer();
     else if (phone.server && !phone.searching) { phone.server.close(); phone.server = null; hold(); }
     message.respond({returnValue: true});
@@ -703,6 +713,7 @@ service.register('phone', function (message) {
   } else {
     phone.searching = false;
     phone.text = '';
+    if (!phone.remoteOn && phone.server) { phone.server.close(); phone.server = null; hold(); }
     message.respond({returnValue: true});
   }
 });

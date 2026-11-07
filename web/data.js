@@ -678,7 +678,6 @@ var Data = (function () {
     });
   }
 
-  /** The streaming service of a found title, among the ones this TV has (p.app, p.service), or none. */
   /**
    * Where a title streams here, from TMDB's providers for the region: p.apps (services whose app the TV has, the most
    * launched first), p.app and p.service (the first), p.elsewhere (services without the app), p.paid (rent/buy).

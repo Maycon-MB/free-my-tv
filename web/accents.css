@@ -27,6 +27,7 @@ body.accent-pink #detail .dbtn.focus { background: #EC4899; border-color: #EC489
 body.accent-pink .card .epbadge.fresh { background: #EC4899; }
 body.accent-pink #detail .depisode { color: #F9A8D4; }
 body.accent-pink.night #buttons .round.pill.offline { border-color: #EC4899; color: #F9A8D4; }
+body.accent-pink #football .news .src { color: #F9A8D4; }
 body.accent-blue.night .tab.focus { background: #3B82F6; }
 body.accent-blue.night .round.focus { background: #3B82F6; border-color: #3B82F6; }
 body.accent-blue.night .round.focus .tip { color: #7FB0FF; }
@@ -55,6 +56,7 @@ body.accent-blue #detail .dbtn.focus { background: #3B82F6; border-color: #3B82F
 body.accent-blue .card .epbadge.fresh { background: #3B82F6; }
 body.accent-blue #detail .depisode { color: #7FB0FF; }
 body.accent-blue.night #buttons .round.pill.offline { border-color: #3B82F6; color: #7FB0FF; }
+body.accent-blue #football .news .src { color: #7FB0FF; }
 body.accent-green.night .tab.focus { background: #22C55E; }
 body.accent-green.night .round.focus { background: #22C55E; border-color: #22C55E; }
 body.accent-green.night .round.focus .tip { color: #6EE7A0; }
@@ -83,6 +85,7 @@ body.accent-green #detail .dbtn.focus { background: #22C55E; border-color: #22C5
 body.accent-green .card .epbadge.fresh { background: #22C55E; }
 body.accent-green #detail .depisode { color: #6EE7A0; }
 body.accent-green.night #buttons .round.pill.offline { border-color: #22C55E; color: #6EE7A0; }
+body.accent-green #football .news .src { color: #6EE7A0; }
 body.accent-purple.night .tab.focus { background: #8B5CF6; }
 body.accent-purple.night .round.focus { background: #8B5CF6; border-color: #8B5CF6; }
 body.accent-purple.night .round.focus .tip { color: #B9A0FF; }
@@ -111,6 +114,7 @@ body.accent-purple #detail .dbtn.focus { background: #8B5CF6; border-color: #8B5
 body.accent-purple .card .epbadge.fresh { background: #8B5CF6; }
 body.accent-purple #detail .depisode { color: #B9A0FF; }
 body.accent-purple.night #buttons .round.pill.offline { border-color: #8B5CF6; color: #B9A0FF; }
+body.accent-purple #football .news .src { color: #B9A0FF; }
 body.accent-orange.night .tab.focus { background: #F97316; }
 body.accent-orange.night .round.focus { background: #F97316; border-color: #F97316; }
 body.accent-orange.night .round.focus .tip { color: #FFAB70; }
@@ -139,6 +143,7 @@ body.accent-orange #detail .dbtn.focus { background: #F97316; border-color: #F97
 body.accent-orange .card .epbadge.fresh { background: #F97316; }
 body.accent-orange #detail .depisode { color: #FFAB70; }
 body.accent-orange.night #buttons .round.pill.offline { border-color: #F97316; color: #FFAB70; }
+body.accent-orange #football .news .src { color: #FFAB70; }
 body.accent-yellow.night .tab.focus { background: #FFE100; color: #1D1D1B; }
 body.accent-yellow.night .round.focus { background: #FFE100; border-color: #FFE100; color: #1D1D1B; }
 body.accent-yellow.night .round.focus .tip { color: #FFE97A; }
@@ -167,3 +172,4 @@ body.accent-yellow #detail .dbtn.focus { background: #FFE100; border-color: #FFE
 body.accent-yellow .card .epbadge.fresh { background: #FFE100; color: #1D1D1B; }
 body.accent-yellow #detail .depisode { color: #FFE97A; }
 body.accent-yellow.night #buttons .round.pill.offline { border-color: #FFE100; color: #FFE97A; }
+body.accent-yellow #football .news .src { color: #FFE97A; }
