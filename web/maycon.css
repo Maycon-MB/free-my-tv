@@ -453,7 +453,7 @@ body:not(.night) #news .rates { background: #F5F5F7; }
 .drawer-open #morehint { opacity: 0; }
 
 /* A title's page: its photo, name, where it streams and named actions. */
-#detail { background: #0B0B0D; }
+#detail { background: #0B0B0D; z-index: 4; }   /* opened from Search: above it, or Search takes the clicks */
 #detail .art { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; background-size: cover; background-position: center top; }
 #detail .shade { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px;
   background: -webkit-linear-gradient(left, rgba(11, 11, 13, 0.95), rgba(11, 11, 13, 0.55) 55%, rgba(11, 11, 13, 0.1));
