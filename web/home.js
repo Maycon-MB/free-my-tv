@@ -591,6 +591,10 @@
       if (heroUrl !== url) return;
       $(next).style.backgroundImage = 'url("' + url + '")';
       setClass($(next), 'on', true);
+      var frame = document.querySelector('#hero .fade');
+      setClass(frame, 'pulsa', false);
+      void frame.offsetWidth;   // restarts the edge's pulse
+      setClass(frame, 'pulsa', true);
       heroFront = next;
     };
     img.src = url;
