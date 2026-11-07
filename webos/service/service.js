@@ -1051,7 +1051,7 @@ service.register('openWarm', function (message) {
   warm.params = p.params;
   warm.giveUp = setTimeout(warmStop, 60000);   // never arrived: forget it
   launchApp(p.id, null);
-  if (p.title) toast('Escolha o perfil: em seguida o app vai para “' + String(p.title).slice(0, 40) + '”.');
+  if (p.title) toast('Abrindo “' + String(p.title).slice(0, 40) + '”. Se pedir perfil, escolha: o título vem em seguida.');
   hold();
   message.respond({returnValue: true, warm: true});
 });
