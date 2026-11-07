@@ -715,6 +715,8 @@ function watchKeyboard(key) {
   });
 }
 
+/** {title, appId, clientKey?}: types the title when a text field of that app gets focus,
+ * within TYPE_WAIT. returnValue false: no title, app id or TV key. */
 service.register('typeLater', function (message) {
   var p = message.payload || {};
   if (p.clientKey) lastKey = p.clientKey;
@@ -1176,6 +1178,8 @@ function warmArrived() {
   });
 }
 
+/** {id, params, title?}: opens the app plain, then sends params once it's in front. returnValue false:
+ * bad id or no params; warm false: the app was already in front, so params went at once. */
 service.register('openWarm', function (message) {
   var p = message.payload || {};
   stopTypeLater();   // one pending title at a time

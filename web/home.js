@@ -266,12 +266,18 @@
     spotify: 'icons/spotify.svg'
   };
 
+  /** A service's logo in box: Netflix's bundled one, else its app's icon from the TV. False when there is neither. */
+  function serviceLogo(key, app, box) {
+    if (key === 'netflix') el('img', '', box).src = BRAND_LOGOS.netflix;
+    else if (app && app.icon) el('img', '', box).src = app.icon;
+    else return false;
+    return true;
+  }
+
   /** Where a pick streams, at a glance: the service's logo (or its name) in the card's corner. */
   function serviceBadge(p, holder) {
-    var app = Data.appFor(p.app), badge = el('div', 'badge', holder);
-    if (p.app === 'netflix') { badge.className += ' netflix'; el('img', '', badge).src = BRAND_LOGOS.netflix; }
-    else if (app && app.icon) el('img', '', badge).src = app.icon;   // the same icon as on the TV's own launcher
-    else { badge.className += ' word'; badge.textContent = p.service; }
+    var badge = el('div', 'badge' + (p.app === 'netflix' ? ' netflix' : ''), holder);
+    if (!serviceLogo(p.app, Data.appFor(p.app), badge)) { badge.className += ' word'; badge.textContent = p.service; }
   }
 
   /** The icons of the TV's apps a title streams on (up to 3), in a poster's corner: recognized before read. */
@@ -282,27 +288,23 @@
       if (!app) continue;
       if (!box) box = el('div', 'appicons', holder);
       var icon = el('div', 'appicon' + (keys[i] === 'netflix' ? ' netflix' : ''), box);
-      if (keys[i] === 'netflix') el('img', '', icon).src = BRAND_LOGOS.netflix;
-      else if (app.icon) el('img', '', icon).src = app.icon;
-      else icon.textContent = app.title.charAt(0);
+      if (!serviceLogo(keys[i], app, icon)) icon.textContent = app.title.charAt(0);
     }
   }
 
-  /** Opens a title in its app, on the title's page when Wikidata knows its id there (else on the app's home). */
-  // Apps that hang on a link when it comes with a cold start: the service opens them plain, then sends the title.
-  var WARM_FIRST = {disney: true, prime: true, appletv: true};
   // Opening a title: one at a time. A second OK while one opens says so instead of doing nothing; after
   // OPEN_WAIT the attempt counts as over, so a lost answer never locks the button.
   var OPEN_WAIT = 15000, opening = {at: 0, title: ''};
 
-  function openTitle(p, app, params) {
-    note('abrir ' + p.title + ' em ' + app.id + (params ? ' com link' : ''));
+  /** Opens a title in its app, on the title's page when its link is known (else on the app's home). */
+  function openTitle(p, app) {
+    note('abrir ' + p.title + ' em ' + app.id);
     rememberTitle(p);
-    if (params || !p.app) { launcher(app.id, app.title, params)(); return null; }
-    if (Date.now() - opening.at < OPEN_WAIT) { toast('Ainda abrindo “' + opening.title + '”…'); return true; }
+    if (!p.app) { launcher(app.id, app.title, null)(); return; }
+    if (Date.now() - opening.at < OPEN_WAIT) { toast('Ainda abrindo “' + opening.title + '”…'); return; }
     opening = {at: Date.now(), title: p.title};
     toast('Abrindo ' + app.title + '…');
-    Data.titleLink(p, p.app, function (params) {
+    Data.titleLink(p, p.app, function (params, warm) {
       opening = {at: 0, title: ''};
       if (!params) {
         launcher(app.id, app.title, null)();
@@ -310,7 +312,7 @@
           toast(res ? 'Abrindo ' + app.title + ': abra a busca dele e “' + p.title + '” será digitado sozinho.'
             : 'Abrindo ' + app.title + ': procure “' + p.title + '” lá dentro.');
         });
-      } else if (WARM_FIRST[p.app]) {
+      } else if (warm) {
         countLaunch(app.id);
         TV.service('openWarm', {id: app.id, params: params, title: p.title}, function (res) {
           if (!res) launcher(app.id, app.title, params)();   // no service (another TV): straight
@@ -319,7 +321,6 @@
         launcher(app.id, app.title, params)();
       }
     });
-    return true;
   }
 
   /** An app's face: its logo on its brand color (or its name, when the icon can't be read). */
@@ -381,7 +382,7 @@
       for (var r = 0; r < apps.length; r++) if (out.indexOf(apps[r]) < 0) out.push(apps[r]);
     }
     shelf = Prefs.get('shelfOrder', 'manual') === 'usage' ? byUsage(out) : out;
-    // All Apps lists every app, by name: with every app on the shelf by default, "the rest" was an empty sheet
+    // All Apps lists every app by name, the shelf's too: by default the shelf already holds them all.
     others = apps.slice().sort(function (x, y) { return x.title.localeCompare(y.title); });
   }
 
@@ -391,6 +392,7 @@
   var st = {zone: Z.SHELF, top: 0, tab: 0, card: 0, shelf: 0, drawer: 0, grid: 0, row: 0, edit: 0, lang: 0, city: 0, key: 0};
   var cards = [];
   var genreAt = 0, genreTimer = 0;   // the chip with focus; st.genre is the one applied
+  var heroWait = '';   // the stage's line while a genre's titles load
   st.genre = 0;
 
   function sheetOpen() { return st.zone === Z.APPS || st.zone === Z.SETTINGS || st.zone === Z.EDIT || st.zone === Z.LANG || st.zone === Z.CITY || st.zone === Z.KEY || st.zone === Z.ABOUT || st.zone === Z.SEARCH || st.zone === Z.TEAMS || st.zone === Z.CTRL || st.zone === Z.HELP || st.zone === Z.DETAIL || st.zone === Z.PAIR; }
@@ -525,9 +527,10 @@
       var p = list[c], card = el('div', 'card', holder);
       var img = el('div', 'img', card);
       // Posters only (TMDB's w185, light on memory); the focused title's photo is the showcase above the row.
+      // No service badge: where it streams is said once, under the stage.
       var poster = el('div', 'layer', img);
       poster.style.backgroundImage = 'url("' + (p.poster ? Data.image(p.poster, 'w185') : Data.image(p.backdrop, 'w300')) + '")';
-      if (!p.poster) el('div', 'pname', img, p.title);   // where it streams: said once, under the stage
+      if (!p.poster) el('div', 'pname', img, p.title);
       el('div', 'layer back', img);
       if (p.kind === 'tv' && TAB_KIND[st.tab] === 'mine') episodeBadge(p, img);
       hover(card, Z.CARDS, c);
@@ -561,8 +564,6 @@
 
   // MARK: - Stage: the focused title large in the middle of its row, its photo whole; its name and where it streams
   // under it, nothing over the photo (as the stage on constanciodev.com.br)
-
-  var heroWait = '';
 
   function showHero() {
     var box = $('herotext'), p = cards[Math.min(st.card, cards.length - 1)];
@@ -1026,7 +1027,11 @@
   function detailButtons() {
     var p = dtTitle, out = [], keys = (p && (p.apps || (p.app ? [p.app] : []))) || [], via = p && pickTarget(p);
     if (via && via.params) {   // Home Settings > Open picks in Nuvio: its own link first
-      out.push({label: '▶  Assistir no ' + via.app.title, run: function () { closeDetail(); launcher(via.app.id, via.app.title, via.params)(); }});
+      out.push({label: '▶  Assistir no ' + via.app.title, run: function () {
+        closeDetail();
+        rememberTitle(p);
+        launcher(via.app.id, via.app.title, via.params)();
+      }});
     }
     for (var i = 0; i < keys.length && out.length < 3; i++) {
       (function (key) {
@@ -1037,7 +1042,7 @@
           var q = {};
           for (var k in p) if (p.hasOwnProperty(k)) q[k] = p[k];
           q.app = key;   // the link for the app picked, not the first one
-          openTitle(q, app, null);
+          openTitle(q, app);
         }});
       })(keys[i]);
     }
@@ -2720,9 +2725,11 @@
     });
   }
 
+  function savedAndRecent() { return Prefs.get('mylist', []).concat(Prefs.get('recent', [])); }
+
   /** Saved titles first, then the ones opened lately, without repeats: the My list tab. */
   function myList() {
-    var out = [], seen = {}, all = Prefs.get('mylist', []).concat(Prefs.get('recent', []));
+    var out = [], seen = {}, all = savedAndRecent();
     for (var i = 0; i < all.length; i++) {
       var k = all[i].kind + ':' + all[i].id;
       if (seen[k] || !all[i].backdrop) continue;
@@ -2734,7 +2741,7 @@
 
   /** In the My list tab: saved, or opened lately (both show there, so both can be taken out). */
   function inMyList(p) {
-    var list = Prefs.get('mylist', []).concat(Prefs.get('recent', []));
+    var list = savedAndRecent();
     for (var i = 0; i < list.length; i++) if (list[i].id === p.id && list[i].kind === p.kind) return true;
     return false;
   }
@@ -2844,6 +2851,8 @@
     holder.style.webkitTransition = holder.style.transition = '';
   }
 
+  function focusGenres() { st.zone = Z.GENRE; genreAt = st.genre; }
+
   function move(dx, dy) {
     if (st.zone === Z.HELP) closeHelp();   // the guide never holds the arrows: they close it and move on
     var tiles = $('tiles').children, cardNodes = $('cards').children;
@@ -2853,13 +2862,13 @@
         else if (dy > 0) { openDrawer(); return; }   // the next row: its header shows at the bottom of the screen
         else if (dy < 0) {
           if (cards.length) { st.zone = Z.CARDS; st.card = nearest(cardNodes, centerX(tiles[st.shelf])); }
-          else if (Data.hasKey()) { st.zone = Z.GENRE; genreAt = st.genre; }
+          else if (Data.hasKey()) focusGenres();
           else { st.zone = Z.TOP; st.top = NTABS + 1; }
         }
         break;
       case Z.CARDS:
         if (dx) st.card = Math.max(0, Math.min(cards.length - 1, st.card + dx));
-        else if (dy < 0) { st.zone = Z.GENRE; genreAt = st.genre; }
+        else if (dy < 0) focusGenres();
         else if (shelf.length) { st.zone = Z.SHELF; st.shelf = nearest(tiles, centerX(cardNodes[st.card])); }
         break;
       case Z.GENRE:
@@ -2876,7 +2885,7 @@
         else if (dy < 0 && !inMenu) { lastTab = st.top; st.top = NTABS + 1; }   // up to the menu, on Search
         else if (dy > 0 && inMenu && tabs) st.top = lastTab;
         else if (dy > 0) {
-          if (tabs) { st.zone = Z.GENRE; genreAt = st.genre; }
+          if (tabs) focusGenres();
           else st.zone = Z.SHELF;
         }
         break;

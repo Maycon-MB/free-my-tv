@@ -261,41 +261,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .card.focus { -webkit-transform: translateY(-6px) scale(1.05); transform: translateY(-6px) scale(1.05); z-index: 2; }
 .card.focus .img { box-shadow: 0 24px 46px rgba(0, 0, 0, 0.34); }
 .card.focus .img::after { opacity: 1; }
-.card .name {
-  position: absolute;
-  left: 0;
-  top: 464px;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 31px;
-  font-weight: 600;
-  letter-spacing: 0.012em;
-  color: #1D1D1F;
-  -webkit-transition: color 2s;
-  transition: color 2s;
-}
-.card .meta {
-  position: absolute;
-  left: 0;
-  top: 506px;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 25px;
-  font-weight: 500;
-  color: #6E6E73;
-  opacity: 0;
-  -webkit-transition: opacity 0.3s;
-  transition: opacity 0.3s;
-}
-.card.wide .meta { opacity: 1; }
-.card.edge .name, .card.edge .meta { visibility: hidden; }
 .night .card .img { background-color: #2C2C2E; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.32); }
-.night .card .name { color: #F5F5F7; }
-.night .card .meta { color: rgba(245, 245, 247, 0.62); }
 
 /* Without a TMDB key (or picks yet): the date and the time instead of the cards. */
 #clock {

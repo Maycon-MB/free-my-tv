@@ -45,7 +45,6 @@ body.night, .night #sky .night { background: #0B0B0D; }
 /* Picks */
 .night .card .img { background-color: #141417; }
 .card .img::after { box-shadow: none; border: 3px solid #E5484D; border-radius: 18px; background: none; }
-.night .card .meta { color: #8C8C96; }
 
 /* Clock, when there are no picks */
 .night #clock { color: #F2F2F3; font-weight: 300; }
@@ -428,7 +427,7 @@ body:not(.night) #news .rates { background: #F5F5F7; }
 #help .row .value { font-size: 24px; color: #B4B4BC; }
 
 
-/* Top: named buttons (icon + word) instead of icon-only circles. */
+/* Top: each button shows its icon and its name, so what it does is read, not guessed. */
 #buttons .round.pill { border-radius: 38px; text-align: left; }
 #buttons .round.pill .sym { left: 24px; top: 20px; }
 #buttons .round.pill .plabel { position: absolute; left: 72px; top: 0; line-height: 76px; font-size: 26px; font-weight: 600; white-space: nowrap; }

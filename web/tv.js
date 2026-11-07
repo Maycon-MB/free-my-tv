@@ -559,7 +559,7 @@ var TV = (function () {
       luna('luna://' + self + '.service/watchGoals', {teams: teams, clientKey: key}, null);
     },
 
-    /** A call to one of the service's methods (headlines, speedTest, remind, phone, f1): done(result) or null off LG. */
+    /** Calls method on the app's webOS service with params: done(its answer, or null off LG or on failure). */
     service: function (method, params, done) {
       if (!webos) { if (done) done(null); return; }
       var p = params || {};

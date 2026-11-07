@@ -83,7 +83,7 @@ var Prefs = (function () {
     forecast: function () { return pick('forecast', 'hours') === 'days' ? 'days' : 'hours'; },
     quotes: function () { return pick('quotes', CONFIG.showCrypto !== false); },
     coin: function (i) { var c = pick('coins', null); return c ? c[i] !== false : true; },
-    /** Picks per tab: 3 (as it was) up to 6. */
+    /** Picks per tab: 8 to 14, 12 by default. */
     cards: function () { var n = pick('cards', 12); return n < 8 ? 8 : n > 14 ? 14 : n; },
     /** Cartoons and anime out of the picks (Home Settings), or config.properties' hide_animation. */
     hideAnimation: function () { return pick('hideAnimation', CONFIG.hideAnimation === true) === true; },
@@ -809,42 +809,44 @@ var Data = (function () {
     });
   }
 
-  /**
-   * Services whose webOS app opens a title from launch params: Wikidata id properties and the params. Netflix's form
-   * is the community's; Disney+'s is what LG's own search sends it (browse id, P13902), tested on webOS 25. Others
-   * open on their home: a web address left Disney+ half-loaded, so no form is guessed.
-   */
+  // How each app opens a title: id from Wikidata or the TV's service (`find`) → `params`; `warm`: it hangs on a
+  // link at a cold start, so it opens plain first. Unlisted ones open on their home (a guessed URL broke Disney+).
   var TITLE_LINKS = {
-    netflix: [['P1874'], function (id) { return {contentTarget: 'm=https://www.netflix.com/title/' + id + '&source_type=4'}; }],
-    disney: [['P13902'], function (id) {
+    // The community's form.
+    netflix: {wikidata: ['P1874'], params: function (id) {
+      return {contentTarget: 'm=https://www.netflix.com/title/' + id + '&source_type=4'};
+    }},
+    // What LG's own search sends it (the browse id), tested on webOS 25.
+    disney: {wikidata: ['P13902'], warm: true, params: function (id) {
       return /^entity-[\w-]+$/.test(id) ? {handledBy: 'app', contentTarget: 'page=browse&id=' + id + '&distributionPartner=lg'} : null;
-    }]
+    }},
+    // No catalogue has Prime's or Apple TV's ids for Brazil: the TV's service finds them on each one's site.
+    prime: {find: 'primeId', warm: true, params: function (res) {
+      return res.gti ? {contentTarget: res.gti} : null;
+    }},
+    appletv: {find: 'appleUrl', warm: true, params: function (res) {
+      return res.url ? {contentTarget: res.url} : null;
+    }}
   };
 
-  /** The launch params that open a title in its service's app: done(params or null). */
+  /** The launch params that open a title in its service's app: done(params or null, warm: open the app first). */
   function titleLink(p, service, done) {
     var spec = TITLE_LINKS[service], k = service + ':' + keyOf(p);
-    // No catalogue has Prime's or Apple TV's ids for Brazil: the TV's service finds them on each one's site.
-    if (service === 'prime' || service === 'appletv') {
-      if (titleLinks[k] !== undefined) { done(titleLinks[k]); return; }
-      TV.service(service === 'prime' ? 'primeId' : 'appleUrl', {title: p.title}, function (res) {
-        var target = res && (res.gti || res.url);
-        titleLinks[k] = target ? {contentTarget: target} : null;
-        done(titleLinks[k]);
-      });
+    if (!spec) { done(null, false); return; }
+    function answer(params) { titleLinks[k] = params; done(params, !!spec.warm); }
+    if (titleLinks[k] !== undefined) { done(titleLinks[k], !!spec.warm); return; }
+    if (spec.find) {
+      TV.service(spec.find, {title: p.title}, function (res) { answer(res ? spec.params(res) : null); });
       return;
     }
-    if (!spec) { done(null); return; }
-    if (titleLinks[k] !== undefined) { done(titleLinks[k]); return; }
     var tmdbProp = p.kind === 'tv' ? 'P4983' : 'P4947', alts = [];
-    for (var i = 0; i < spec[0].length; i++) alts.push('{ ?i wdt:' + spec[0][i] + ' ?n }');
+    for (var i = 0; i < spec.wikidata.length; i++) alts.push('{ ?i wdt:' + spec.wikidata[i] + ' ?n }');
     var q = 'SELECT ?n WHERE { ?i wdt:' + tmdbProp + ' "' + Number(p.id) + '" . ' + alts.join(' UNION ') + ' } LIMIT 1';
     get('https://query.wikidata.org/sparql?format=json&query=' + encodeURIComponent(q), {Accept: 'application/sparql-results+json'},
         function (err, o) {
       var b = !err && o && o.results && o.results.bindings && o.results.bindings[0];
       var id = b && b.n && /^[\w.:\/-]+$/.test(b.n.value) ? b.n.value : '';
-      titleLinks[k] = id ? spec[1](id, p.kind) : null;
-      done(titleLinks[k]);
+      answer(id ? spec.params(id) : null);
     });
   }
 
@@ -915,7 +917,7 @@ var Data = (function () {
   function asTitle(r, kind, names) {
     return {id: r.id, kind: kind, title: r.title || r.name || '', original: r.original_title || r.original_name || '',
       year: (r.release_date || r.first_air_date || '').slice(0, 4), poster: r.poster_path, backdrop: r.backdrop_path,
-      popularity: r.popularity || 0, votes: r.vote_count || 0, app: null, service: '',
+      popularity: r.popularity || 0, votes: r.vote_count || 0, app: null, service: '', overview: r.overview || '',
       genres: (r.genre_ids || []).map(function (g) { return names[g]; }).filter(function (x) { return x; })};
   }
 
@@ -961,8 +963,8 @@ var Data = (function () {
   }
 
   /**
-   * Movies and shows for a query: done(error, [{id, kind, title, year, poster, backdrop, genres, app, service,
-   * paid, person}]). Only the newest query answers, so typing on doesn't show an older list.
+   * Movies and shows for a query: done(error, [{id, kind, title, year, poster, backdrop, genres, overview, app,
+   * service, paid, person}]). Only the newest query answers, so typing on doesn't show an older list.
    */
   function search(query, done) {
     var seq = ++searchSeq, tries = attempts(query);
@@ -1025,11 +1027,13 @@ var Data = (function () {
     usable: usable,
     search: search,
     titleLink: titleLink,
+    /** The genre chips, 'Tudo' first: {name, movie, tv}, TMDB's genre ids (one missing: no titles of that kind). */
     GENRES: GENRES,
     byGenre: byGenre,
     genreNow: genreNow,
     trailer: trailer,
     episodes: episodes,
+    /** A service key's display name ('netflix' → 'Netflix'), or the key itself when unknown. */
     serviceName: serviceName,
     services: services,
     refresh: function () { refreshWeather(); refreshPrices(); refreshRecs(); },
