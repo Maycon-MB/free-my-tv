@@ -7,8 +7,10 @@ webOS 25 com 1,2 GB de RAM. O README e o CLAUDE.md do original continuam valendo
 
 Tudo à vista, sem gesto escondido (o padrão de Netflix e YouTube):
 
-- **Topo:** abas Explorar, Filmes, Séries e Minha lista; ícone de rede (verde com barras de sinal, vermelho sem
-  rede; OK abre a rede da TV) e os botões Pesquisar, Controles e Ajustes, com nome.
+- **Topo, duas linhas:** em cima, o menu (ícone de rede verde com barras ou vermelho, Pesquisar, Controles,
+  Ajustes); embaixo, as abas Explorar, Filmes, Séries e Minha lista e um cartão de informação que reveza jogo, F1
+  e manchete (jogo ao vivo fica fixo). ← → anda na linha; ↑ ↓ troca de linha.
+- **Minha lista:** OK num filme ou série → + Minha lista. Cada perfil tem a sua.
 - **Fileira de apps:** ← → percorre, OK abre. Segurar OK num app muda ele de lugar (atalho; também há a ordem
   "Mais usados" nos Ajustes).
 - **▼ desce** para Entradas, TV ao vivo, clima, desempenho e ajustes da TV, anunciados no rodapé.
@@ -79,8 +81,10 @@ neste repositório.
 Confirmado (webOS 25): renovação pela TV, volta ao Free My TV pelo Home, Netflix e Disney+ no título, trailer,
 pesquisa pelo celular e QR code, manchetes, F1, futebol, permissões da API de controle remoto.
 
-A testar (instalação pendente: a TV estava desligada): controle pelo celular (a TV pede Permitir de novo pelas
-permissões de teclado e ponteiro), ícone de rede e barras de sinal, medir a memória, timer até desligar, só o som, aviso de gol com jogo ao vivo, a TV ligando no app pela "última entrada"
+Confirmado em 2026-11-06: ícone de rede com sinal real (74%), página do celular só no IP da casa (Host falso →
+403), pareamento pelo QR, memória da tela de ~75 para 55 MB.
+
+A testar: tecla do celular chegando na TV (depende do Permitir das permissões de ponteiro), timer até desligar, só o som, aviso de gol com jogo ao vivo, a TV ligando no app pela "última entrada"
 (inclusive depois de tirar da tomada) e o roteiro de abrir no título em outros apps (fim deste arquivo).
 
 ## Atualizar com o original
