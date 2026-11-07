@@ -831,6 +831,8 @@ var Data = (function () {
     if (longer.length && longer.join(' ') !== plain(query)) out.push(longer.join(' '));
     longer.sort(function (a, b) { return b.length - a.length; });
     for (i = 0; i < longer.length && i < 2; i++) if (longer[i].length >= 4 && longer.length > 1) out.push(longer[i]);
+    // Last: the longest word's first 4 letters ("stranjer tings" -> "stra"); the likeness filter keeps the right one.
+    if (longer[0] && longer[0].length >= 6) out.push(longer[0].slice(0, 4));
     return out;
   }
 
@@ -927,7 +929,7 @@ var Data = (function () {
             if ((r.media_type === 'movie' || r.media_type === 'tv') && r.poster_path) found.push(asTitle(r, r.media_type, names));
           }
           // A retry with fewer words matches loosely: keep only titles that look like what was typed.
-          if (n > 0) found = found.filter(function (p) { return Math.max(likeness(p.title, query), likeness(p.original, query)) > 0.45; });
+          if (n > 0) found = found.filter(function (p) { return Math.max(likeness(p.title, query), likeness(p.original, query)) > 0.5; });
           if (!found.length && n + 1 < tries.length) { attempt(n + 1); return; }
           finish(err, rank(found, query).slice(0, SEARCH_PROVIDERS + 5), null);
         });

@@ -289,6 +289,8 @@
   }
 
   /** Opens a title in its app, on the title's page when Wikidata knows its id there (else on the app's home). */
+  // Apps that hang on a link when it comes with a cold start: the service opens them plain, then sends the title.
+  var WARM_FIRST = {disney: true};
   var opening = 0;
 
   function openTitle(p, app, params) {
@@ -299,8 +301,17 @@
     toast('Abrindo ' + app.title + '…');
     Data.titleLink(p, p.app, function (params) {
       opening = 0;
-      launcher(app.id, app.title, params)();
-      if (!params) toast('Abrindo ' + app.title + ': procure “' + p.title + '” lá dentro.');
+      if (!params) {
+        launcher(app.id, app.title, null)();
+        toast('Abrindo ' + app.title + ': procure “' + p.title + '” lá dentro.');
+      } else if (WARM_FIRST[p.app]) {
+        countLaunch(app.id);
+        TV.service('openWarm', {id: app.id, params: params}, function (res) {
+          if (!res) launcher(app.id, app.title, params)();   // no service (another TV): straight
+        });
+      } else {
+        launcher(app.id, app.title, params)();
+      }
     });
     return true;
   }

@@ -278,7 +278,7 @@ var keepAsking = false;
 
 /** Keeps the service alive exactly while a timer, a reminder or a match watch is pending. */
 function hold() {
-  var need = !!(sleepTimer || watchTimer || reminderTimer || phone.server || back.on);
+  var need = !!(sleepTimer || watchTimer || reminderTimer || phone.server || back.on || warm.id);
   if (!service.activityManager) return;
   if (need && !keepAlive && !keepAsking) {
     keepAsking = true;
@@ -973,6 +973,7 @@ function launchHome() {
 function onForeground(appId) {
   if (!appId) return;   // empty while switching
   backLog(back.prev + ' -> ' + appId);
+  if (warm.id && appId === warm.id) warmArrived();
   if (LG_HOME.test(appId) && Date.now() - back.at > 3000) {   // once per visit, even if the home reports twice
     back.at = Date.now();
     launchHome();
@@ -997,6 +998,40 @@ function watchForeground() {
     }
   });
 }
+
+// MARK: - Opening a title in an app that hangs when a link comes with a cold start (Disney+ stops half-loaded): the
+// app opens plain first and gets the title once it is in front and has had time to load.
+
+var WARM_DELAY = 6000, warm = {id: '', params: null, timer: null, giveUp: null};
+
+function launchApp(id, params) {
+  service.call('luna://com.webos.applicationManager/launch', params ? {id: id, params: params} : {id: id}, function () {});
+}
+
+function warmArrived() {
+  clearTimeout(warm.timer);
+  var id = warm.id, params = warm.params;
+  warm.timer = setTimeout(function () {
+    if (warm.id !== id) return;
+    warm.id = '';
+    clearTimeout(warm.giveUp);
+    launchApp(id, params);   // the app is running now: the link is a relaunch, which it handles
+    hold();
+  }, WARM_DELAY);
+}
+
+service.register('openWarm', function (message) {
+  var p = message.payload || {};
+  if (!/^[\w.-]+$/.test(p.id || '') || !p.params) { message.respond({returnValue: false}); return; }
+  if (back.prev === p.id) { launchApp(p.id, p.params); message.respond({returnValue: true, warm: false}); return; }
+  warm.id = p.id;
+  warm.params = p.params;
+  clearTimeout(warm.giveUp);
+  warm.giveUp = setTimeout(function () { warm.id = ''; hold(); }, 60000);   // never arrived: forget it
+  launchApp(p.id, null);
+  hold();
+  message.respond({returnValue: true, warm: true});
+});
 
 /** on: turn the watch on or off; the answer has the last transitions seen, for checking it on a TV. */
 service.register('backHome', function (message) {
