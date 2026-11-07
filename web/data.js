@@ -824,10 +824,12 @@ var Data = (function () {
   /** The launch params that open a title in its service's app: done(params or null). */
   function titleLink(p, service, done) {
     var spec = TITLE_LINKS[service], k = service + ':' + keyOf(p);
-    if (service === 'prime') {   // no catalogue has Prime's ids for Brazil: the TV's service finds it on Prime's site
+    // No catalogue has Prime's or Apple TV's ids for Brazil: the TV's service finds them on each one's site.
+    if (service === 'prime' || service === 'appletv') {
       if (titleLinks[k] !== undefined) { done(titleLinks[k]); return; }
-      TV.service('primeId', {title: p.title}, function (res) {
-        titleLinks[k] = res && res.gti ? {contentTarget: res.gti} : null;
+      TV.service(service === 'prime' ? 'primeId' : 'appleUrl', {title: p.title}, function (res) {
+        var target = res && (res.gti || res.url);
+        titleLinks[k] = target ? {contentTarget: target} : null;
         done(titleLinks[k]);
       });
       return;

@@ -475,6 +475,36 @@ function primeId(title, done) {
   });
 }
 
+// Apple TV's app opens a title from its page's address (tv.apple.com/br/movie|show/<slug>/umc.cmc...), found on
+// the site's search by the slug that matches the title.
+var appleUrls = {};
+
+function appleUrl(title, done) {
+  var want = plainTitle(title);
+  if (appleUrls[want] !== undefined) { done(appleUrls[want]); return; }
+  var req = https.get('https://tv.apple.com/br/search?term=' + encodeURIComponent(title), {headers: {'User-Agent':
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36'}},
+  function (res) {
+    var body = '';
+    res.setEncoding('utf8');
+    res.on('data', function (c) { if (body.length < 3e6) body += c; });
+    res.on('end', function () {
+      var re = /tv\.apple\.com\/br\/(movie|show)\/([a-z0-9-]+)\/(umc\.cmc\.[a-z0-9]+)/g, m, found = '';
+      while ((m = re.exec(body)) && !found) {
+        if (plainTitle(m[2].replace(/-+/g, ' ')) === want) found = 'https://tv.apple.com/br/' + m[1] + '/' + m[2] + '/' + m[3];
+      }
+      appleUrls[want] = found;
+      done(found);
+    });
+  });
+  req.on('error', function () { done(''); });
+  req.setTimeout(10000, function () { req.abort(); });
+}
+
+service.register('appleUrl', function (message) {
+  appleUrl((message.payload || {}).title, function (url) { message.respond({returnValue: true, url: url}); });
+});
+
 service.register('primeId', function (message) {
   primeId((message.payload || {}).title, function (gti) { message.respond({returnValue: true, gti: gti}); });
 });
