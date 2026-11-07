@@ -278,7 +278,7 @@ var keepAsking = false;
 
 /** Keeps the service alive exactly while a timer, a reminder or a match watch is pending. */
 function hold() {
-  var need = !!(sleepTimer || watchTimer || reminderTimer || phone.server || back.on || warm.id || later.conn);
+  var need = !!(sleepTimer || watchTimer || reminderTimer || phone.server || back.on || warm.id || later.text);
   if (!service.activityManager) return;
   if (need && !keepAlive && !keepAsking) {
     keepAsking = true;
@@ -688,14 +688,31 @@ function pressKey(name) {
 
 var TYPE_WAIT = 180000, later = {text: '', conn: null, timer: null};
 
-function laterNote(t) { notes.push(new Date().toISOString().slice(11, 19) + ' teclado: ' + t); if (notes.length > 40) notes.shift(); }
-
 function stopTypeLater() {
   clearTimeout(later.timer);
   later.text = '';
   if (later.conn) later.conn.close();
   later.conn = null;
   hold();
+}
+
+/** Listens for a focused text field; the TV drops the socket every ~40 s, so it reconnects while a title waits. */
+function watchKeyboard(key) {
+  later.conn = ssapSocket(key, {
+    registered: function () {
+      later.conn.send({type: 'subscribe', id: 'kb', uri: 'ssap://com.webos.service.ime/registerRemoteKeyboard'});
+    },
+    message: function (m) {
+      var w = m.id === 'kb' && m.payload && m.payload.currentWidget;
+      if (!w || !w.focus || !later.text || back.prev !== later.appId) return;   // only into the app it was opened for
+      call('com.webos.service.ime/insertText', key, {text: later.text, replace: 0}, function () {});
+      stopTypeLater();
+    },
+    end: function () {
+      later.conn = null;
+      if (later.text) setTimeout(function () { if (later.text && !later.conn) watchKeyboard(key); }, 1000);
+    }
+  });
 }
 
 service.register('typeLater', function (message) {
@@ -708,20 +725,7 @@ service.register('typeLater', function (message) {
   later.text = String(p.title).slice(0, 80);
   later.appId = p.appId;
   later.timer = setTimeout(stopTypeLater, TYPE_WAIT);
-  later.conn = ssapSocket(key, {
-    registered: function () {
-      laterNote('registrado');
-      later.conn.send({type: 'subscribe', id: 'kb', uri: 'ssap://com.webos.service.ime/registerRemoteKeyboard'});
-    },
-    message: function (m) {
-      laterNote(JSON.stringify(m).slice(0, 220));
-      var w = m.id === 'kb' && m.payload && m.payload.currentWidget;
-      if (!w || !w.focus || !later.text || back.prev !== later.appId) return;   // only into the app it was opened for
-      call('com.webos.service.ime/insertText', key, {text: later.text, replace: 0}, function () {});
-      stopTypeLater();
-    },
-    end: function () { laterNote('fim'); later.conn = null; }
-  });
+  watchKeyboard(key);
   hold();
   message.respond({returnValue: true});
 });
