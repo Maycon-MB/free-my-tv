@@ -522,8 +522,7 @@
       // Posters only (TMDB's w185, light on memory); the focused title's photo is the showcase above the row.
       var poster = el('div', 'layer', img);
       poster.style.backgroundImage = 'url("' + (p.poster ? Data.image(p.poster, 'w185') : Data.image(p.backdrop, 'w300')) + '")';
-      if (!p.poster) el('div', 'pname', img, p.title);
-      if (p.service) serviceBadge(p, img);
+      if (!p.poster) el('div', 'pname', img, p.title);   // where it streams: said once, beside the showcase
       if (p.kind === 'tv' && TAB_KIND[st.tab] === 'mine') episodeBadge(p, img);
       hover(card, Z.CARDS, c);
       holdable(card);
