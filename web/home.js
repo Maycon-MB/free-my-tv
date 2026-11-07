@@ -553,7 +553,7 @@
     heroWait = 'Procurando ' + g.name.toLowerCase() + ' nos seus apps…';
     Data.byGenre(kind, g, function () {
       heroWait = '';
-      if (Data.GENRES[st.genre] === g && TAB_KIND[st.tab] === kind) renderCards();
+      if (Data.GENRES[st.genre] === g && TAB_KIND[st.tab] === kind && Data.genreNow(kind, g)) renderCards();
     });
     return [];
   }
@@ -1020,7 +1020,7 @@
 
   // MARK: - A title's page (OK on a pick or a search result): what it is and its actions, named, as on Netflix
 
-  var dtTitle = null, dtFrom = null, dtButton = 0;
+  var dtTitle = null, dtFrom = null, dtButton = 0, dtButtons = [];
 
   function detailButtons() {
     var p = dtTitle, out = [], keys = (p && (p.apps || (p.app ? [p.app] : []))) || [], via = p && pickTarget(p);
@@ -1077,7 +1077,7 @@
       });
     }
     if (app && p.elsewhere && p.elsewhere.length) el('div', 'delse', info, 'Também em ' + p.elsewhere.slice(0, 3).join(', ') + ' (sem o app)');
-    var row = el('div', 'dbtns', info), buttons = detailButtons();
+    var row = el('div', 'dbtns', info), buttons = dtButtons = detailButtons();   // kept: OK runs what is drawn
     for (var i = 0; i < buttons.length; i++) hover(el('div', 'dbtn' + (i === 0 && app ? ' primary' : ''), row, buttons[i].label), Z.DETAIL, i);
     st.zone = Z.DETAIL;
     setClass(page, 'open', true);
@@ -1088,6 +1088,7 @@
     setClass($('detail'), 'open', false);
     $('detail').innerHTML = '';   // its 1280 px photo leaves memory with it
     st.zone = dtFrom || Z.CARDS;
+    if (st.zone === Z.CARDS && !cards.length) st.zone = Z.SHELF;
     updateFocus();
   }
 
@@ -1489,7 +1490,7 @@
   var ROTATE_EVERY = 8000;
 
   function rotatePick() {
-    if (!Prefs.get('rotate', true) || document.hidden || saverOn || ambientOn || sheetOpen()) return;
+    if (!Prefs.get('rotate', true) || document.hidden || saverOn || ambientOn || sheetOpen() || moving) return;
     if (st.zone === Z.CARDS || st.zone === Z.DRAWER || cards.length < 2 || Date.now() - idleAt < ROTATE_EVERY) return;
     st.card = (st.card + 1) % cards.length;
     updateFocus();
@@ -2567,6 +2568,13 @@
     $('tilename').textContent = '← mover →';
   }
 
+  /** A move or a held OK left behind by another app taking over: both end without saving anything new. */
+  function endPress() {
+    clearTimeout(holdTimer);
+    holdTimer = 0;
+    if (moving) { moving = false; renderShelf(); }
+  }
+
   function stopMoving() {
     moving = false;
     renderShelf();
@@ -2808,7 +2816,7 @@
         closeHelp();
         return;
       case Z.DETAIL:
-        detailButtons()[dtButton].run();
+        if (dtButtons[dtButton]) dtButtons[dtButton].run();
         return;
       case Z.PAIR:
         closePairing();
@@ -2897,7 +2905,7 @@
         moveSearch(dx, dy);
         break;
       case Z.DETAIL:
-        if (dx) dtButton = Math.max(0, Math.min(detailButtons().length - 1, dtButton + dx));
+        if (dx) dtButton = Math.max(0, Math.min(dtButtons.length - 1, dtButton + dx));
         break;
       case Z.CTRL:
         if (dy) ctrlRow = Math.max(0, Math.min(controlRows().length - 1, ctrlRow + dy));
@@ -2946,6 +2954,7 @@
       if (zone === Z.TOP && index < NTABS && !Data.hasKey()) return;   // the tabs are hidden without the picks
       if (zone === Z.SHELF && st.zone === Z.DRAWER) closeDrawer();
       st.zone = zone;
+      if (zone !== Z.GENRE) clearTimeout(genreTimer);
       if (zone === Z.TOP) { st.top = index; if (index < NTABS) selectTab(index); }
       else if (zone === Z.CARDS) st.card = index;
       else if (zone === Z.GENRE) { genreAt = index; genreSoon(); }
@@ -3200,6 +3209,7 @@
   function reset() {
     hideSaver();
     hideAmbient();
+    endPress();
     // Home (or opening the app again) lands on the home screen, whatever page was open
     if ($('searchpage').className.indexOf('open') >= 0) closeSearch();
     if ($('detail').className.indexOf('open') >= 0) closeDetail();
@@ -3242,7 +3252,15 @@
   document.addEventListener('webOSRelaunch', reopened);   // LG: opened again while running
   window.addEventListener('appcontrol', reopened);        // Samsung: the same
   document.addEventListener('visibilitychange', function () {
-    if (document.hidden) { hideSaver(); hideAmbient(); releaseImages(); if (st.zone === Z.SEARCH) closeSearch(); return; }
+    if (document.hidden) {
+      hideSaver();
+      hideAmbient();
+      releaseImages();
+      endPress();
+      if ($('detail').className.indexOf('open') >= 0) closeDetail();
+      if ($('searchpage').className.indexOf('open') >= 0) closeSearch();
+      return;
+    }
     idleAt = Date.now();
     restoreImages();
     okDown = false;   // a key held while another app took over never sends its keyup here

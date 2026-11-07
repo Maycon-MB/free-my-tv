@@ -292,7 +292,7 @@ body.night, .night #sky .night { background: #0B0B0D; }
 
 /* Moving an app: the tile lifts with a dashed red edge while ← → carry it. */
 .tile.moving { -webkit-transform: scale(1.12) translateY(-14px); transform: scale(1.12) translateY(-14px); }
-.tile.moving::after { opacity: 1; border-style: dashed; border-color: #FF7A7F; }
+.tile.moving::after { opacity: 1; border-style: dashed !important; border-color: #FF7A7F; }   /* accents.css sets border */
 
 /* Drawer: the TV's performance beside the weather, as labeled bars. */
 .night .panel { background: #141417; border: 1px solid rgba(255, 255, 255, 0.08); }

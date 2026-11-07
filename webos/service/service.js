@@ -726,6 +726,7 @@ service.register('typeLater', function (message) {
   later.appId = p.appId;
   later.timer = setTimeout(stopTypeLater, TYPE_WAIT);
   watchKeyboard(key);
+  watchForeground();
   hold();
   message.respond({returnValue: true});
 });
@@ -1118,16 +1119,17 @@ function onForeground(appId) {
   if (!appId) return;   // empty while switching
   backLog(back.prev + ' -> ' + appId);
   if (warm.id && appId === warm.id) warmArrived();
-  if (LG_HOME.test(appId) && Date.now() - back.at > 3000) {   // once per visit, even if the home reports twice
+  if (back.on && LG_HOME.test(appId) && Date.now() - back.at > 3000) {   // once per visit, even if the home reports twice
     back.at = Date.now();
     launchHome();
   }
   back.prev = appId;
 }
 
+/** The app in front, watched while Back to Free My TV is on or a title waits for its app (openWarm, typeLater). */
 function watchForeground() {
-  if (!back.on || back.conn) return;
-  back.conn = ssapSocket(back.key, {
+  if (!(back.on || warm.id || later.text) || back.conn) return;
+  back.conn = ssapSocket(back.key || lastKey, {
     registered: function (key) {
       back.key = key;
       back.conn.send({type: 'subscribe', id: 'fg', uri: 'ssap://com.webos.applicationManager/getForegroundAppInfo'});
@@ -1138,7 +1140,7 @@ function watchForeground() {
     },
     end: function () {
       back.conn = null;
-      if (back.on) back.retry = setTimeout(watchForeground, 2000);   // the TV's API drops it now and then
+      if (back.on || warm.id || later.text) back.retry = setTimeout(watchForeground, 2000);   // the TV drops it now and then
     }
   });
 }
@@ -1183,6 +1185,7 @@ service.register('openWarm', function (message) {
   warm.id = p.id;
   warm.params = p.params;
   warm.giveUp = setTimeout(warmStop, 60000);   // never arrived: forget it
+  watchForeground();
   launchApp(p.id, null);
   if (p.title) toast('Abrindo “' + String(p.title).slice(0, 40) + '”. Se pedir perfil, escolha: o título vem em seguida.');
   hold();

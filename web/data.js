@@ -559,7 +559,7 @@ var Data = (function () {
     {name: 'Drama', movie: 18, tv: 18}, {name: 'Terror', movie: 27}, {name: 'Animação', movie: 16, tv: 16},
     {name: 'Crime', movie: 80, tv: 80}, {name: 'Romance', movie: 10749}, {name: 'Documentário', movie: 99, tv: 99},
     {name: 'Família', movie: 10751, tv: 10751}];
-  var GENRE_MAX = 14, GENRE_KEEP = 6 * 3600000, genreLists = {}, providerIds = null;
+  var GENRE_MAX = 14, GENRE_KEEP = 6 * 3600000, GENRE_RETRY = 60000, genreLists = {}, providerIds = null;
 
   /** TMDB's ids of the services whose app this TV has (and Picks from leaves on). */
   function myProviders(done) {
@@ -580,7 +580,7 @@ var Data = (function () {
   /** A genre's list already fetched (in the last 6 hours), or null. */
   function genreNow(kind, g) {
     var hit = genreLists[genreKey(kind, g)];
-    return hit && Date.now() - hit.at < GENRE_KEEP ? hit.list : null;
+    return hit && Date.now() - hit.at < (hit.list.length ? GENRE_KEEP : GENRE_RETRY) ? hit.list : null;
   }
 
   /** done(list): the most popular titles of a genre on the TV's apps, each with where it streams. */
@@ -588,7 +588,7 @@ var Data = (function () {
     var hit = genreNow(kind, g);
     if (hit) { done(hit); return; }
     myProviders(function (ids) {
-      if (!ids.length) { done([]); return; }
+      if (!ids.length) { genreLists[genreKey(kind, g)] = {at: Date.now(), list: []}; done([]); return; }
       var found = {movie: [], tv: []}, kinds = kind ? [kind] : ['movie', 'tv'];
       each(kinds, function (k, next) {
         if (!g[k]) { next(); return; }
