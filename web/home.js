@@ -308,7 +308,7 @@
         toast('Abrindo ' + app.title + ': procure “' + p.title + '” lá dentro.');
       } else if (WARM_FIRST[p.app]) {
         countLaunch(app.id);
-        TV.service('openWarm', {id: app.id, params: params}, function (res) {
+        TV.service('openWarm', {id: app.id, params: params, title: p.title}, function (res) {
           if (!res) launcher(app.id, app.title, params)();   // no service (another TV): straight
         });
       } else {

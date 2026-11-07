@@ -1002,33 +1002,44 @@ function watchForeground() {
 // MARK: - Opening a title in an app that hangs when a link comes with a cold start (Disney+ stops half-loaded): the
 // app opens plain first and gets the title once it is in front and has had time to load.
 
-var WARM_DELAY = 6000, warm = {id: '', params: null, timer: null, giveUp: null};
+// Sent twice once the app is in front: a cold start shows the profile picker first, and a link sent before a profile
+// is picked is dropped; the second one comes after that choice. Never while another app is in front.
+var WARM_SENDS = [8000, 20000], warm = {id: '', params: null, timers: [], giveUp: null};
 
 function launchApp(id, params) {
   service.call('luna://com.webos.applicationManager/launch', params ? {id: id, params: params} : {id: id}, function () {});
 }
 
+function warmStop() {
+  for (var i = 0; i < warm.timers.length; i++) clearTimeout(warm.timers[i]);
+  warm.timers = [];
+  clearTimeout(warm.giveUp);
+  warm.id = '';
+  hold();
+}
+
 function warmArrived() {
-  clearTimeout(warm.timer);
+  if (warm.timers.length) return;   // already counting since it came to the front
   var id = warm.id, params = warm.params;
-  warm.timer = setTimeout(function () {
-    if (warm.id !== id) return;
-    warm.id = '';
-    clearTimeout(warm.giveUp);
-    launchApp(id, params);   // the app is running now: the link is a relaunch, which it handles
-    hold();
-  }, WARM_DELAY);
+  WARM_SENDS.forEach(function (after, n) {
+    warm.timers.push(setTimeout(function () {
+      if (warm.id !== id || back.prev !== id) { warmStop(); return; }   // left the app: the title isn't wanted now
+      launchApp(id, params);   // running: the link is a relaunch, which it handles
+      if (n === WARM_SENDS.length - 1) warmStop();
+    }, after));
+  });
 }
 
 service.register('openWarm', function (message) {
   var p = message.payload || {};
   if (!/^[\w.-]+$/.test(p.id || '') || !p.params) { message.respond({returnValue: false}); return; }
   if (back.prev === p.id) { launchApp(p.id, p.params); message.respond({returnValue: true, warm: false}); return; }
+  warmStop();
   warm.id = p.id;
   warm.params = p.params;
-  clearTimeout(warm.giveUp);
-  warm.giveUp = setTimeout(function () { warm.id = ''; hold(); }, 60000);   // never arrived: forget it
+  warm.giveUp = setTimeout(warmStop, 60000);   // never arrived: forget it
   launchApp(p.id, null);
+  if (p.title) toast('Escolha o perfil: em seguida o app vai para “' + String(p.title).slice(0, 40) + '”.');
   hold();
   message.respond({returnValue: true, warm: true});
 });
