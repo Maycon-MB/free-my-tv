@@ -554,7 +554,7 @@
     return [];
   }
 
-  // MARK: - Showcase: the focused title large, its photo bleeding in from the right, its name and where it streams
+  // MARK: - Showcase: the focused title's photo in a clean frame, its name and where it streams beside it
 
   var heroWait = '', heroUrl = '', heroFront = 'heroA';
 
@@ -569,7 +569,6 @@
     el('div', 'htitle', box, p.title);
     var about = (p.meta || '').replace(' · ' + p.service, '').replace(p.service, '');
     el('div', 'hmeta', box, [p.year, about].filter(function (x) { return x; }).join(' · '));
-    if (p.overview) el('div', 'hover', box, p.overview);
     var app = p.app && Data.appFor(p.app);
     if (p.service) {
       var where = el('div', 'hwhere' + (app ? '' : ' off'), box);
