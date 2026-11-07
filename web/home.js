@@ -377,7 +377,8 @@
       for (var r = 0; r < apps.length; r++) if (out.indexOf(apps[r]) < 0) out.push(apps[r]);
     }
     shelf = Prefs.get('shelfOrder', 'manual') === 'usage' ? byUsage(out) : out;
-    others = apps.filter(function (x) { return shelf.indexOf(x) < 0; });
+    // All Apps lists every app, by name: with every app on the shelf by default, "the rest" was an empty sheet
+    others = apps.slice().sort(function (x, y) { return x.title.localeCompare(y.title); });
   }
 
   // MARK: - Focus
@@ -957,10 +958,10 @@
       })(keys[i]);
     }
     out.push({label: 'Trailer', run: function () { closeDetail(); playTrailerOf(p); }});
-    out.push({label: inMyList(p) ? '✓ Na minha lista' : '+ Minha lista', run: function () {
+    out.push({label: inMyList(p) ? '− Tirar da minha lista' : '+ Minha lista', run: function () {
       toggleMyList(p);
       var b = document.querySelectorAll('#detail .dbtn')[dtButton];
-      if (b) b.textContent = inMyList(p) ? '✓ Na minha lista' : '+ Minha lista';
+      if (b) b.textContent = inMyList(p) ? '− Tirar da minha lista' : '+ Minha lista';
     }});
     out.push({label: 'Voltar', run: closeDetail});
     return out;
@@ -1671,6 +1672,8 @@
     }
     drawerInputs = drawerItems.length;
     drawerItems.push({label: tr('All Apps'), symbol: 'apps', run: openApps});
+    var store = storeApp();
+    if (store) drawerItems.push({label: 'Loja LG', symbol: 'store', run: launcher(store.id, store.title)});
     drawerItems.push({label: 'Adicionar app', symbol: 'icons/sym-add.svg', run: function () { openShelfEdit(Z.DRAWER); }});
     drawerItems.push({label: tr('Home Settings'), symbol: 'settings', run: openSettings});
     if (TV.canOpenSettings) drawerItems.push({label: tr('TV Settings'), symbol: 'tv_settings', run: tvSettings});
@@ -2491,6 +2494,11 @@
     });
   }
 
+  function storeApp() {
+    for (var i = 0; i < apps.length; i++) if (apps[i].id === 'com.webos.app.discovery') return apps[i];
+    return null;
+  }
+
   function youtubeApp() {
     for (var i = 0; i < apps.length; i++) if (/youtube\.leanback/.test(apps[i].id)) return apps[i];
     return null;
@@ -2584,16 +2592,18 @@
     return out;
   }
 
+  /** In the My list tab: saved, or opened lately (both show there, so both can be taken out). */
   function inMyList(p) {
-    var list = Prefs.get('mylist', []);
+    var list = Prefs.get('mylist', []).concat(Prefs.get('recent', []));
     for (var i = 0; i < list.length; i++) if (list[i].id === p.id && list[i].kind === p.kind) return true;
     return false;
   }
 
   function toggleMyList(p) {
-    var keep = Prefs.get('mylist', []).filter(function (x) { return !(x.id === p.id && x.kind === p.kind); });
-    var adding = !inMyList(p);
+    function other(x) { return !(x.id === p.id && x.kind === p.kind); }
+    var adding = !inMyList(p), keep = Prefs.get('mylist', []).filter(other);
     if (adding) keep.unshift(keptTitle(p));
+    else Prefs.set('recent', Prefs.get('recent', []).filter(other));
     Prefs.set('mylist', keep.slice(0, MYLIST_MAX));
     toast(adding ? p.title + ' entrou na Minha lista.' : p.title + ' saiu da Minha lista.');
     if (TAB_KIND[st.tab] === 'mine') { cards = []; renderCards(); }
@@ -3039,6 +3049,8 @@
   function loadApps(done) {
     TV.apps(function (list) {
       apps = list.filter(function (a) { return !hidden(a); });
+      // LG's store calls itself just "Apps": named for what it does, it reads as the place to get new apps
+      for (var n = 0; n < apps.length; n++) if (apps[n].id === 'com.webos.app.discovery') apps[n].title = 'Loja LG';
       Data.setApps(apps);
       pickShelf();
       TV.inputs(function (list2) {

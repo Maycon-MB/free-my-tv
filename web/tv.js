@@ -139,8 +139,8 @@ var TV = (function () {
     {id: 'com.webos.app.hdmi4', key: 'hdmi4', label: 'HDMI 4', symbol: 'hdmi'}
   ];
 
-  // Not shown among LG's apps: the inputs above, LG's own home and launchers.
-  var HIDDEN = /^(com\.webos\.app\.(livetv|hdmi\d|home|homeconnect|discovery|launcher)|com\.webos\.app\.inputpicker)$/;
+  // Not shown among LG's apps: the inputs above, LG's own home and launchers (its store stays: new apps come from it).
+  var HIDDEN = /^(com\.webos\.app\.(livetv|hdmi\d|home|homeconnect|launcher)|com\.webos\.app\.inputpicker)$/;
 
   // Not shown among Samsung's apps: Smart Hub's own pieces, the platform's tools and players (but its browser,
   // Netflix and Prime Video, which live there too), services, keyboards and ad players. The rest is what Smart Hub shows.
