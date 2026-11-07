@@ -771,7 +771,8 @@
 
   // MARK: - Profiles: each keeps its own shelf order, theme, accent color and kids mode
 
-  var PROFILE_KEYS = ['shelf', 'theme', 'accent', 'kids', 'mylist', 'recent', 'extras', 'showPerf', 'bg', 'starsMove'];
+  var PROFILE_KEYS = ['shelf', 'theme', 'accent', 'kids', 'mylist', 'recent', 'infoGames', 'infoF1', 'infoNews', 'showPerf',
+    'bg', 'starsMove'];
   var PROFILE_NAMES = ['Maycon', 'Família', 'Crianças', 'Visitas', 'Convidado'];
   var ACCENTS = [['red', 'Vermelho'], ['pink', 'Rosa'], ['blue', 'Azul'], ['green', 'Verde'], ['purple', 'Roxo'],
     ['orange', 'Laranja'], ['yellow', 'Amarelo']];
@@ -819,9 +820,15 @@
     toast('Perfil: ' + profiles()[current()].name);
   }
 
-  /** Headlines and sports at the top, per profile: off leaves the title, tabs and buttons only. */
+  /** What the info slot beside the tabs shows, per profile (Home Settings). */
+  function showsInfo(kind) { return Prefs.get(kind, true); }
+
+  /** The slot again with the profile's choices: off ones go, and their data isn't fetched. */
   function applyExtras() {
-    setClass(body, 'no-extras', !Prefs.get('extras', true));
+    setClass(body, 'no-extras', !showsInfo('infoGames') && !showsInfo('infoF1') && !showsInfo('infoNews'));
+    pollFootball();
+    pollF1();
+    pollInfo();
   }
 
   function backgroundName() {
@@ -1113,7 +1120,7 @@
   /** The headline's card in the info slot, refreshed with the next headline each time the slot comes back to it. */
   function showNews() {
     var box = $('football'), card = $('newscard');
-    if (!box || !news.length) { if (card) card.parentNode.removeChild(card); return; }
+    if (!box || !news.length || !showsInfo('infoNews')) { if (card) card.parentNode.removeChild(card); return; }
     if (!card) { card = el('div', 'match news', box); card.id = 'newscard'; }
     var h = news[newsAt++ % news.length];
     card.innerHTML = '';
@@ -1135,6 +1142,7 @@
   }
 
   function pollInfo() {
+    if (!showsInfo('infoNews')) { news = []; showNews(); return; }
     TV.service('headlines', {}, function (res) {
       if (res) { news = res.headlines || []; rates = res.rates || null; showNews(); }
     });
@@ -1231,7 +1239,7 @@
     if (!box) return;
     box.innerHTML = '';
     var teams = (res && res.teams) || [];
-    for (var i = 0; i < teams.length && i < MAX_TEAMS; i++) {
+    for (var i = 0; showsInfo('infoGames') && i < teams.length && i < MAX_TEAMS; i++) {
       var m = teams[i] && shownMatch(teams[i]);
       if (!m || !m.home || !m.away) continue;
       var chip = el('div', 'match' + (m.state === 'in' ? ' live' : ''), box);
@@ -1258,7 +1266,7 @@
     if (soon && soon.state === 'pre' && soon.home && soon.away) {
       TV.service('remind', {date: soon.date, text: soon.home.abbr + ' × ' + soon.away.abbr + ' começa em 10 minutos'});
     }
-    if (f1Race) footballChip(box, 'F1, GP ' + f1Race.name, f1When(f1Race.date));
+    if (f1Race && showsInfo('infoF1')) footballChip(box, 'F1, GP ' + f1Race.name, f1When(f1Race.date));
     showNews();
     rotateInfo();
   }
@@ -1277,12 +1285,14 @@
   }
 
   function pollF1() {
+    if (!showsInfo('infoF1')) { f1Race = null; return; }
     TV.service('f1', {}, function (res) { f1Race = res && res.race; });
   }
 
   function pollFootball() {
+    clearTimeout(footballTimer);
     if (document.hidden) { footballTimer = setTimeout(pollFootball, FOOTBALL_EVERY); return; }
-    TV.football(followed(), showFootball);
+    TV.football(showsInfo('infoGames') ? followed() : [], showFootball);   // still runs: it draws F1 and news too
   }
 
   // MARK: - Constellation background: drawn once at half size, so it costs no frames.
@@ -1821,8 +1831,12 @@
       {label: 'Times', value: followed().map(function (t) { return t.name; }).join(', ') || 'nenhum', opens: true,
         step: function (d) { if (d >= 0) openTeams(); }},
       {label: 'Ajuda: onde fica cada coisa', value: '›', opens: true, step: function (d) { if (d >= 0) openHelp(); }},
-      {label: 'Notícias e esportes no topo', toggle: Prefs.get('extras', true),
-        step: function () { Prefs.set('extras', !Prefs.get('extras', true)); applyExtras(); }},
+      {label: 'Topo: jogos dos meus times', toggle: showsInfo('infoGames'),
+        step: function () { Prefs.set('infoGames', !showsInfo('infoGames')); applyExtras(); }},
+      {label: 'Topo: Fórmula 1', toggle: showsInfo('infoF1'),
+        step: function () { Prefs.set('infoF1', !showsInfo('infoF1')); applyExtras(); }},
+      {label: 'Topo: manchetes', toggle: showsInfo('infoNews'),
+        step: function () { Prefs.set('infoNews', !showsInfo('infoNews')); applyExtras(); }},
       {label: 'Painel de desempenho', toggle: Prefs.get('showPerf', true),
         step: function () { Prefs.set('showPerf', !Prefs.get('showPerf', true)); renderPanels(); }},
       {label: 'Controle pelo celular', toggle: Prefs.get('phoneRemote', true),
@@ -3040,10 +3054,7 @@
   // LG's home never stays: the service brings Free My TV back (Home Settings can turn it off).
   TV.service('backHome', {on: Prefs.get('backHome', true)});
   TV.service('phone', {action: 'remote', on: Prefs.get('phoneRemote', true)});
-  pollF1();
-  pollFootball();
-  pollStats();
-  pollInfo();
+  pollStats();   // the info slot's sources start in applyExtras(), above
   setInterval(pollInfo, INFO_EVERY);
   setInterval(rotateInfo, INFO_TURN);
   setInterval(pollF1, 6 * 3600000);
