@@ -35,7 +35,7 @@ Tudo à vista, sem gesto escondido (o padrão de Netflix e YouTube):
 | Pesquisa | TMDB com filtros; tolera erro de digitação; nome de ator traz os trabalhos dele; seus apps primeiro | `web/data.js` |
 | Pesquisa | Resultados ao digitar; QR code para digitar pelo celular (porta 8770, código de 4 dígitos) | `web/home.js`, `webos/service/service.js` |
 | Explorar | Até 6 títulos, o que passa no Brasil primeiro, selo com o ícone do app, destaque girando | `web/data.js`, `web/home.js` |
-| Perfis | Ordem dos apps, tema, cor, fundo, modo infantil, lista, recentes, notícias/esportes e painel de desempenho | `web/home.js` |
+| Perfis | Ordem dos apps, tema, cor, fundo, modo infantil, lista, recentes, o que o cartão do topo mostra (jogos, F1, manchetes) e painel de desempenho | `web/home.js` |
 | Esportes | Times escolhidos pelo controle (ESPN), aviso de gol e lembrete 10 min antes, por cima de outros apps | `webos/service/service.js` |
 | Controles | Botão Controles: controle pelo celular, só o som (apaga a tela), timer que desliga a TV, teste de velocidade | `web/home.js`, `web/tv.js` |
 | Celular | Controle remoto completo (setas, OK, Voltar, Início, volume, play, digitar) em qualquer app; pareia uma vez pelo QR (porta 8770, token guardado) | `webos/service/service.js` |
