@@ -3,6 +3,11 @@
 Fork de [simbasjungles/free-my-tv](https://github.com/simbasjungles/free-my-tv) (MIT) ajustado para uma LG
 webOS 25 com 1,2 GB de RAM. O README e o CLAUDE.md do original continuam valendo; aqui fica só o que muda.
 
+**Em 5 linhas:** o Free My TV abre sozinho ao ligar a TV e volta sozinho quando a home da LG aparece. ← → anda,
+OK abre a página do título e **Assistir** abre no app certo. ↑ leva aos gêneros, às abas e ao menu (Pesquisar,
+Controles, Ajustes). ▼ na fileira de apps leva às entradas (HDMI, TV ao vivo), Todos os apps e Loja LG. Voltar
+nunca sai do app. Para digitar pelo celular, aponte a câmera para o QR code do Pesquisar.
+
 ## Como se usa
 
 Tudo à vista, sem gesto escondido (o padrão de Netflix e YouTube):
@@ -36,14 +41,13 @@ Tudo à vista, sem gesto escondido (o padrão de Netflix e YouTube):
 | Navegação | Séries da Minha lista com selo de novo episódio (últimos 7 dias) ou do próximo (dia da semana) | `web/data.js`, `web/home.js` |
 | Navegação | Ícone de rede no topo: verde com 1 a 4 barras (`/proc/net/wireless`), vermelho sem rede; abre a rede da TV | `web/home.js`, `webos/service/service.js` |
 | Navegação | Volta sempre ao Free My TV quando a home da LG aparece (serviço assina o app em primeiro plano) | `webos/service/service.js` |
-| Apps | Todos os apps na fileira; segurar OK move; ordem manual ou mais usados; Claro tv+, Pluto TV e Mercado Play reconhecidos | `web/home.js`, `web/data.js` |
+| Apps | Todos os apps na fileira (segurar OK move; ordem manual ou mais usados); Todos os apps em ordem alfabética; Loja LG visível; Adicionar app; Claro tv+, Pluto TV e Mercado Play reconhecidos | `web/home.js`, `web/data.js`, `web/tv.js` |
 | Apps | Título em vários apps: um Assistir por app (os mais usados primeiro), ícones nos resultados; conta assinatura, grátis e com anúncios | `web/data.js`, `web/home.js` |
 | Apps | Abre no título: Netflix, Disney+, Prime Video e Apple TV (tabela no fim); os demais na tela inicial do app | `web/data.js` |
 | Pesquisa | TMDB com filtros; tolera erro de digitação; nome de ator traz os trabalhos dele; seus apps primeiro | `web/data.js` |
 | Pesquisa | Resultados ao digitar; QR code para digitar pelo celular (porta 8770, código de 4 dígitos) | `web/home.js`, `webos/service/service.js` |
 | Explorar | Palco no centro (foto 16:9 inteira, borda do palco do portfólio) + pôsteres dos lados, 8 a 14 por aba (padrão 12), destaque girando | `web/data.js`, `web/home.js` |
 | Explorar | Gêneros (TMDB discover por gênero, só nos provedores dos seus apps, guardado 6 h), na tela inicial e no Pesquisar | `web/data.js`, `web/home.js` |
-| Apps | Todos os apps lista tudo em ordem alfabética; Loja LG visível e com atalho; Adicionar app na fileira de baixo | `web/home.js`, `web/tv.js` |
 | Perfis | Ordem dos apps, tema, cor, fundo, modo infantil, lista, recentes, o que o cartão do topo mostra (jogos, F1, manchetes) e painel de desempenho | `web/home.js` |
 | Esportes | Times escolhidos pelo controle (ESPN), aviso de gol e lembrete 10 min antes, por cima de outros apps | `webos/service/service.js` |
 | Controles | Botão Controles: controle pelo celular, só o som (apaga a tela), timer que desliga a TV, teste de velocidade | `web/home.js`, `web/tv.js` |
@@ -79,8 +83,7 @@ A sessão dura 1000 h e, se acabar, a TV apaga o app. Três renovações, nenhum
    `ResetDevModeSession` da LG uma vez por dia, quando o app abre. Confirmado na TV em 2026-11-02.
 2. **GitHub** (reserva): o repositório privado `Maycon-MB/tv-devmode-renovar` renova toda segunda, com o token no
    segredo `LG_DEVMODE_TOKEN`.
-3. **Notebook** (redundante): `%USERPROFILE%\.freemytv
-enovar-devmode.ps1` pela tarefa `FreeMyTV-RenovarDevMode`.
+3. **Notebook** (redundante): `%USERPROFILE%\.freemytv\renovar-devmode.ps1` pela tarefa `FreeMyTV-RenovarDevMode`.
 
 Se o Developer Mode for desligado e ligado de novo, o token muda: atualize o segredo do GitHub. O token nunca entra
 neste repositório.
@@ -94,8 +97,11 @@ Confirmado em 2026-11-06: ícone de rede com sinal real (74%), página do celula
 403), pareamento pelo QR, tecla do celular movendo o foco na TV (depois do Permitir das permissões de ponteiro),
 memória da tela de ~75 para 55 MB.
 
-A testar: timer até desligar, só o som, aviso de gol com jogo ao vivo, a TV ligando no app pela "última entrada"
-(inclusive depois de tirar da tomada) e o roteiro de abrir no título em outros apps (fim deste arquivo).
+Confirmado em 2026-11-07: palco e gêneros, pesquisa abrindo os apps, Os Simpsons no Disney+, Os Anéis de Poder
+no Prime, Ruptura no Apple TV, Voltar sempre de volta ao app.
+
+A testar: digitação automática do título (Globoplay), timer até desligar, só o som, aviso de gol com jogo ao vivo,
+a TV ligando no app pela "última entrada" (inclusive depois de tirar da tomada), e as branches da revisão (abaixo).
 
 ## Atualizar com o original
 
@@ -128,7 +134,7 @@ O app grava as configurações em `/media/developer/temp/freemytv-backup.json` n
 | Netflix | `contentTarget: m=https://www.netflix.com/title/<id>&source_type=4` | Wikidata P1874 |
 | Disney+ | `handledBy: app`, `contentTarget: page=browse&id=entity-<uuid>&distributionPartner=lg` | Wikidata P13902 |
 | Prime Video | `contentTarget: amzn1.dv.gti.<uuid>` | busca + página do título em primevideo.com (serviço `primeId`) |
-| Apple TV | `contentTarget: https://tv.apple.com/br/movie|show/<slug>/umc.cmc.<id>` (filme e série) | busca em tv.apple.com (serviço `appleUrl`) |
+| Apple TV | `contentTarget: https://tv.apple.com/br/movie/<slug>/umc.cmc.<id>` (série: `/show/`) | busca em tv.apple.com (serviço `appleUrl`) |
 
 Nos que não abrem no título, o Free My TV abre o app e **digita o nome sozinho** no primeiro campo de texto que
 ganhar o foco nele em até 3 minutos (serviço `typeLater`, só no app aberto; a TV derruba a conexão a cada ~40 s e
@@ -142,6 +148,14 @@ Pluto TV e Mercado Play: sem formato público. A LG nega a apps do Developer Mod
 e `listApps`, que dariam o modelo de link de cada app; a busca da própria LG (`nlpmanager` + `sdx`) é o caminho
 que sobra, estudado no [Glasshouse](https://github.com/rorygallagher2024/glasshouse/blob/main/docs/development/TV-RESEARCH.md).
 
+## Se algo der errado
+
+- **App travado ou sem resposta:** aperte Home (ele volta sozinho); se continuar, no computador:
+  `python webos/install.py 192.168.0.149` reinstala sem perder os ajustes.
+- **App sumiu da TV:** o Developer Mode venceu (seção acima). Ligue de novo, instale e restaure o backup.
+- **Um app não abriu no título:** é esperado fora de Netflix, Disney+, Prime e Apple TV (tabela acima); se pedir
+  perfil, escolha e espere até 20 s.
+
 ## Diagnóstico na TV
 
 Pelo SSH da TV: `luna-send-pub -n 1 luna://io.freemytv.service/notes '{}'` mostra os últimos 40 registros do app
@@ -150,7 +164,10 @@ Pelo SSH da TV: `luna-send-pub -n 1 luna://io.freemytv.service/notes '{}'` mostr
 ## Próximos passos (revisão de 2026-11-07, aprovados pelo dono)
 
 Cinco revisões com as skills (seguranca, regras-de-negocio + comentarios, bugs, frontend-design, documentacao).
-O dono aprovou os quatro pacotes; nenhum aplicado ainda.
+O dono aprovou os quatro pacotes. Feitos sem a TV, em branches no GitHub, a instalar e testar na TV antes de juntar:
+`feat/digita-titulo-no-app` (digitação automática), `fix/revisao-bugs` (A), `fix/revisao-visual` (C),
+`fix/revisao-seguranca` (B) e esta documentação. Na segurança, conferir nas notas os nomes dos chamadores
+("chamado por …"): se o próprio app aparecer com outro nome, ele é recusado e precisa entrar em `CALLERS`.
 
 **A. Bugs**
 1. Gênero com lista vazia (sem chave TMDB ou falha) pede de novo sem parar: guardar o vazio por 1 min em
