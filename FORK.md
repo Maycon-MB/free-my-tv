@@ -130,6 +130,10 @@ O app grava as configurações em `/media/developer/temp/freemytv-backup.json` n
 | Prime Video | `contentTarget: amzn1.dv.gti.<uuid>` | busca + página do título em primevideo.com (serviço `primeId`) |
 | Apple TV | `contentTarget: https://tv.apple.com/br/movie|show/<slug>/umc.cmc.<id>` (filme e série) | busca em tv.apple.com (serviço `appleUrl`) |
 
+Nos que não abrem no título, o Free My TV abre o app e **digita o nome sozinho** no primeiro campo de texto que
+ganhar o foco nele em até 3 minutos (serviço `typeLater`, só no app aberto; a TV derruba a conexão a cada ~40 s e
+ela reconecta). A testar no Globoplay.
+
 Os quatro abrem primeiro o app e mandam o título aos 8 s e aos 20 s (o seletor de perfil descarta o link de um
 app frio). Não abriram no título: Prime com `replaceParams.deeplinkingParams` ou ASIN (volta ao perfil); Max com
 `urn:hbo:series:…`, `play.hbomax.com/page/urn:…`, `play.hbomax.com/show/<uuid>` (o formato do Android),
@@ -137,3 +141,47 @@ app frio). Não abriram no título: Prime com `replaceParams.deeplinkingParams` 
 Pluto TV e Mercado Play: sem formato público. A LG nega a apps do Developer Mode `getAppInfo`, `getAllContents`
 e `listApps`, que dariam o modelo de link de cada app; a busca da própria LG (`nlpmanager` + `sdx`) é o caminho
 que sobra, estudado no [Glasshouse](https://github.com/rorygallagher2024/glasshouse/blob/main/docs/development/TV-RESEARCH.md).
+
+## Diagnóstico na TV
+
+Pelo SSH da TV: `luna-send-pub -n 1 luna://io.freemytv.service/notes '{}'` mostra os últimos 40 registros do app
+(o que foi aberto, erros), e `.../backHome '{"on":true}'` as últimas trocas de app. Ficam só na memória.
+
+## Próximos passos (revisão de 2026-11-07, aprovados pelo dono)
+
+Cinco revisões com as skills (seguranca, regras-de-negocio + comentarios, bugs, frontend-design, documentacao).
+O dono aprovou os quatro pacotes; nenhum aplicado ainda.
+
+**A. Bugs**
+1. Gênero com lista vazia (sem chave TMDB ou falha) pede de novo sem parar: guardar o vazio por 1 min em
+   `byGenre` (`web/data.js`) e só redesenhar em `cardList` quando `Data.genreNow` tiver resposta.
+2. Home durante "mover app": `reset()` e `visibilitychange` param o modo mover e o `holdTimer`.
+3. Página do título aberta pela pesquisa + Home: ao esconder, fechar detalhe e pesquisa pela classe `open`, não pela zona.
+4. Tirar o último título da Minha lista e voltar: `closeDetail` manda o foco à fileira de apps se não há cartões.
+5. Links do Disney+/Prime/Apple dependem do "Voltar ao Free My TV": assinar o app em primeiro plano também com
+   `warm.id`/`later.text` e só relançar o Free My TV com `back.on`.
+6. Menores: `.tile.moving::after` com cor que não é vermelha perde o tracejado (`accents.css`); `rotatePick` apaga
+   "← mover →"; gênero aplicado tarde quando o ponteiro já foi para os cartões; botões do detalhe guardados em `openDetail`.
+
+**B. Segurança**
+1. O serviço atende qualquer chamador do luna: recusar quem não é `io.freemytv` (`message.sender`) nos métodos que agem.
+2. Chave do TMDB fora do `backup` (ou arquivo com modo 0600); arquivo de celulares com modo 0600.
+3. Teto global de erros por código de pareamento; `req.destroy()` ao passar do limite do corpo; Max-Age do cookie 30 dias.
+4. Limite de entradas nos caches `primeIds`/`appleUrls` e uma busca por vez; cortar o trecho do HTML antes da regex do Prime.
+5. `ssap` não devolver o `clientKey`; `notes` só para o próprio app.
+
+**C. Visual**
+1. Aviso (`#toast`) acima da fileira de apps, não por cima do menu.
+2. Dica "▼ Entradas…" sempre visível, no canto direito.
+3. Ajustes: mostrar que a lista continua; seção "Perfil" sem repetir a linha; fundo escuro atrás da janela.
+4. Pesquisa legível: sem "// PESQUISAR" e sem Mono maiúsculo pequeno; tirar "segure OK para o trailer".
+5. Resumo do filme na página do título (`overview` já vem do TMDB); "Episódio 8 chega terça" no lugar de "T1E8 · terça".
+6. Wi-Fi com nome; um só jeito de mostrar o foco; gaveta com títulos em Inter; palco sem metade vazia ao abrir.
+
+**D. Organização e docs**
+1. A regra "como cada app abre o título" num lugar só (`TITLE_LINKS` com `warm` e a busca de id), sem `WARM_FIRST` no home.js.
+2. `openTitle` sem o parâmetro morto; Nuvio passando por ele; `warm` e `later` se cancelam (feito).
+3. Apagar CSS e campos mortos do cartão antigo; comentários com histórico; docstrings de contrato em `TV.service`,
+   `serviceName`, `GENRES`, `openWarm`, `typeLater`.
+4. FORK.md: "Como usar em 5 linhas" no topo, "Se algo der errado", corrigir o caminho do script de renovação
+   (barra invertida) e o `|` da linha do Apple TV na tabela; juntar linhas repetidas de "O que muda".
