@@ -132,7 +132,8 @@ O app grava as configurações em `/media/developer/temp/freemytv-backup.json` n
 
 Os quatro abrem primeiro o app e mandam o título aos 8 s e aos 20 s (o seletor de perfil descarta o link de um
 app frio). Não abriram no título: Prime com `replaceParams.deeplinkingParams` ou ASIN (volta ao perfil); Max com
-`urn:hbo:series:…`, `play.hbomax.com/page/urn:…`, `play.hbomax.com/show/<uuid>` e o uuid puro. Globoplay, Claro tv+,
+`urn:hbo:series:…`, `play.hbomax.com/page/urn:…`, `play.hbomax.com/show/<uuid>` (o formato do Android),
+`play.max.com/show/<uuid>`, `show/<uuid>` e o uuid puro, com o app aberto e fechado. Globoplay, Claro tv+,
 Pluto TV e Mercado Play: sem formato público. A LG nega a apps do Developer Mode `getAppInfo`, `getAllContents`
 e `listApps`, que dariam o modelo de link de cada app; a busca da própria LG (`nlpmanager` + `sdx`) é o caminho
 que sobra, estudado no [Glasshouse](https://github.com/rorygallagher2024/glasshouse/blob/main/docs/development/TV-RESEARCH.md).
