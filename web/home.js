@@ -522,7 +522,8 @@
       // Posters only (TMDB's w185, light on memory); the focused title's photo is the showcase above the row.
       var poster = el('div', 'layer', img);
       poster.style.backgroundImage = 'url("' + (p.poster ? Data.image(p.poster, 'w185') : Data.image(p.backdrop, 'w300')) + '")';
-      if (!p.poster) el('div', 'pname', img, p.title);   // where it streams: said once, beside the showcase
+      if (!p.poster) el('div', 'pname', img, p.title);   // where it streams: said once, under the stage
+      el('div', 'layer back', img);
       if (p.kind === 'tv' && TAB_KIND[st.tab] === 'mine') episodeBadge(p, img);
       hover(card, Z.CARDS, c);
       holdable(card);
@@ -530,8 +531,8 @@
     st.card = Math.min(st.card, Math.max(0, list.length - 1));
     if (!list.length && st.zone === Z.CARDS) st.zone = Z.SHELF;
     backdrop(list.length ? Data.image(list[st.card].backdrop, 'w300') : '');
+    stageAt = -1;
     updateFocus();
-    heroArt();
   }
 
   /** The row's titles: the tab's picks, or the chosen genre's (fetched once, then kept for 6 hours). */
@@ -553,9 +554,10 @@
     return [];
   }
 
-  // MARK: - Showcase: the focused title's photo in a clean frame, its name and where it streams beside it
+  // MARK: - Stage: the focused title large in the middle of its row, its photo whole; its name and where it streams
+  // under it, nothing over the photo (as the stage on constanciodev.com.br)
 
-  var heroWait = '', heroUrl = '', heroFront = 'heroA';
+  var heroWait = '';
 
   function showHero() {
     var box = $('herotext'), p = cards[Math.min(st.card, cards.length - 1)];
@@ -566,37 +568,14 @@
       return;
     }
     el('div', 'htitle', box, p.title);
+    var line = el('div', 'hmeta', box), app = p.app && Data.appFor(p.app);
     var about = (p.meta || '').replace(' · ' + p.service, '').replace(p.service, '');
-    el('div', 'hmeta', box, [p.year, about].filter(function (x) { return x; }).join(' · '));
-    var app = p.app && Data.appFor(p.app);
+    el('span', '', line, [p.year, about].filter(function (x) { return x; }).join(' · '));
     if (p.service) {
-      var where = el('div', 'hwhere' + (app ? '' : ' off'), box);
+      var where = el('span', 'hwhere' + (app ? '' : ' off'), line);
       if (app) serviceBadge(p, where);
-      el('span', '', where, app ? 'Assistir no ' + p.service : 'Na ' + p.service + ' (app não instalado)');
+      el('span', '', where, app ? p.service : 'Na ' + p.service + ' (app não instalado)');
     }
-  }
-
-  /** The focused title's photo, once the focus rests: two layers cross-fade, the hidden one lets its photo go. */
-  function heroArt() {
-    var p = cards[Math.min(st.card, cards.length - 1)], url = p && p.backdrop ? Data.image(p.backdrop, 'w1280') : '';
-    if (url === heroUrl) return;
-    heroUrl = url;
-    var next = heroFront === 'heroA' ? 'heroB' : 'heroA', old = $(heroFront);
-    setClass(old, 'on', false);
-    setTimeout(function () { if (!/\bon\b/.test(old.className)) old.style.backgroundImage = 'none'; }, 700);
-    if (!url) return;
-    var img = new Image();
-    img.onload = function () {
-      if (heroUrl !== url) return;
-      $(next).style.backgroundImage = 'url("' + url + '")';
-      setClass($(next), 'on', true);
-      var frame = document.querySelector('#hero .fade');
-      setClass(frame, 'pulsa', false);
-      void frame.offsetWidth;   // restarts the edge's pulse
-      setClass(frame, 'pulsa', true);
-      heroFront = next;
-    };
-    img.src = url;
   }
 
   function renderGenres() {
@@ -620,17 +599,31 @@
     layoutCards();
   }
 
-  /**
-   * The card with focus (st.card, also while focus is elsewhere) is the wide one, the others narrow; past the third the
-   * row scrolls a card at a time (the holder slides), and the cards at the edges lose their text. Only the holder's
-   * transform and the backdrop's opacity animate: the widths change at once (older TVs).
-   */
-  var POSTER_STEP = 160, POSTERS_SEEN = 11;
+  // The stage's card in the middle; the posters on each side, fading with distance; the rest not drawn at all.
+  var STAGE_LEFT = 600, STAGE_W = 720, SIDE_W = 180, SIDE_GAP = 20, SIDE_SEEN = 4, stageAt = -1;
 
   function layoutCards() {
-    var holder = $('cards'), nodes = holder.children, scroll = Math.max(0, st.card - (POSTERS_SEEN - 2)) * POSTER_STEP;
-    for (var i = 0; i < nodes.length; i++) nodes[i].style.left = (80 + i * POSTER_STEP) + 'px';
-    holder.style.webkitTransform = holder.style.transform = 'translateX(' + (-scroll) + 'px)';
+    var nodes = $('cards').children;
+    for (var i = 0; i < nodes.length; i++) {
+      var d = i - st.card, n = nodes[i], back = n.querySelector('.back');
+      var left = d === 0 ? STAGE_LEFT : d < 0 ? STAGE_LEFT + d * (SIDE_W + SIDE_GAP)
+        : STAGE_LEFT + STAGE_W + SIDE_GAP + (d - 1) * (SIDE_W + SIDE_GAP);
+      n.style.left = left + 'px';
+      n.className = n.className.replace(/\s*\b(stage|side|far|off)\b/g, '') +
+        (d === 0 ? ' stage' : Math.abs(d) > SIDE_SEEN ? ' off' : Math.abs(d) > 1 ? ' far' : ' side');
+      if (d === 0 && cards[i] && !back.style.backgroundImage) {
+        back.style.backgroundImage = 'url("' + Data.image(cards[i].backdrop, 'w780') + '")';
+      } else if (d !== 0 && back.style.backgroundImage) {
+        back.style.backgroundImage = '';   // one 780 px photo decoded at a time
+      }
+    }
+    if (stageAt !== st.card && nodes[st.card]) {   // one short pulse of the edge when the title on stage changes
+      stageAt = st.card;
+      var edge = nodes[st.card];
+      setClass(edge, 'pulsa', false);
+      void edge.offsetWidth;
+      setClass(edge, 'pulsa', true);
+    }
     showHero();
   }
 
@@ -666,7 +659,6 @@
     clearTimeout(bgTimer);
     bgTimer = setTimeout(function () {
       if (cards.length) backdrop(Data.image(cards[Math.min(st.card, cards.length - 1)].backdrop, 'w300'));
-      heroArt();
     }, BG_FOLLOW_MS);
   }
 

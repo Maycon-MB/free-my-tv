@@ -582,66 +582,60 @@ body:not(.night) #morehint { color: #6E6E73; }
 #morehint { left: 80px; right: auto; text-align: left; -webkit-transition: opacity 0.15s; transition: opacity 0.15s; }
 #morehint.away { opacity: 0; }
 
-/* MARK: - Showcase: the focused title's photo whole, in a clean frame at the top right with nothing over it; its
-   name and where it streams on the left, the posters below (11 in view). */
-#hero { position: absolute; left: 0; top: 0; width: 1920px; height: 580px; }
-#hero .art {
-  position: absolute; left: 1160px; top: 178px; width: 680px; height: 383px; border-radius: 18px;
-  background-color: #141417; background-size: cover; background-position: center;
-  opacity: 0; -webkit-transition: opacity 0.5s; transition: opacity 0.5s;
-}
-#hero .art.on { opacity: 1; }
-/* The stage, as on constanciodev.com.br: a hairline frame whose top edge is lit red, a faint red glow behind,
-   and one short pulse of the edge when the title changes (opacity only: cheap on the TV's GPU). */
-#hero .fade {
-  position: absolute; left: 1159px; top: 177px; width: 680px; height: 383px; border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.12); border-top-color: rgba(255, 90, 95, 0.45);
-}
-#hero .fade::after {
-  content: ''; position: absolute; left: -2px; top: -2px; right: -2px; bottom: -2px; border-radius: 19px;
-  border: 2px solid rgba(255, 90, 95, 0.6); opacity: 0;
-}
-#hero .fade.pulsa::after { -webkit-animation: pulso-palco 0.7s ease-out; animation: pulso-palco 0.7s ease-out; }
-@-webkit-keyframes pulso-palco { 0% { opacity: 1; } 100% { opacity: 0; } }
-@keyframes pulso-palco { 0% { opacity: 1; } 100% { opacity: 0; } }
+/* MARK: - Stage: the focused title in the middle of its row, its 16:9 photo whole in a 720x405 card with the
+   portfolio's stage edge (hairline, top lit red, one pulse when it changes); posters on each side, fading with
+   distance; its name and where it streams centered under it, on the plain background. */
+#hero { position: absolute; left: 0; top: 0; width: 1920px; height: 812px; }
 #hero::before {
-  content: ''; position: absolute; left: 1060px; top: 90px; width: 880px; height: 560px;
-  background: -webkit-radial-gradient(70% 20%, ellipse, rgba(229, 72, 77, 0.16), rgba(229, 72, 77, 0) 60%);
-  background: radial-gradient(ellipse at 70% 20%, rgba(229, 72, 77, 0.16), rgba(229, 72, 77, 0) 60%);
+  content: ''; position: absolute; left: 360px; top: 250px; width: 1200px; height: 560px;
+  background: -webkit-radial-gradient(50% 35%, ellipse, rgba(229, 72, 77, 0.14), rgba(229, 72, 77, 0) 60%);
+  background: radial-gradient(ellipse at 50% 35%, rgba(229, 72, 77, 0.14), rgba(229, 72, 77, 0) 60%);
 }
-#football { max-width: 410px; overflow: hidden; }   /* ends before the frame */
-.no-picks #hero, .no-key #hero, .no-key #genres { display: none; }
-#herotext { position: absolute; left: 80px; top: 372px; width: 1040px; font-family: 'Inter', sans-serif; }
+#football { max-width: 1110px; }
+#herotext { position: absolute; left: 160px; top: 728px; width: 1600px; text-align: center; font-family: 'Inter', sans-serif; }
 #herotext .htitle {
-  font-size: 60px; font-weight: 800; line-height: 68px; letter-spacing: -0.02em; color: #F5F5F7;
+  font-size: 40px; font-weight: 800; line-height: 46px; letter-spacing: -0.01em; color: #F5F5F7;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-#herotext .hmeta { margin-top: 8px; font-size: 26px; font-weight: 600; color: #A1A1AA; white-space: nowrap; }
-#herotext .hwhere { display: inline-block; margin-top: 16px; height: 48px; line-height: 48px; font-size: 26px; font-weight: 700; color: #F5F5F7; white-space: nowrap; }
+#herotext .hmeta { margin-top: 4px; height: 34px; line-height: 34px; font-size: 24px; font-weight: 600; color: #A1A1AA; white-space: nowrap; }
+#herotext .hwhere { margin-left: 18px; color: #F5F5F7; font-weight: 700; }
 #herotext .hwhere.off { color: #8C8C96; font-weight: 600; }
 #herotext .hwhere .badge {
-  position: relative; left: 0; top: 0; display: inline-block; vertical-align: top; margin-right: 14px;
-  width: 48px; height: 48px; padding: 0; border-radius: 12px; overflow: hidden;
+  position: relative; left: 0; top: 0; display: inline-block; vertical-align: -8px; margin-right: 10px;
+  width: 32px; height: 32px; padding: 0; border-radius: 8px; overflow: hidden;
 }
-#herotext .hwhere .badge img { width: 48px; height: 48px; }
-#herotext .hwhere .badge.netflix img { width: 26px; height: 40px; margin: 4px 11px; }
-#herotext .hwhere .badge.word { width: auto; padding: 0 12px; }
-#herotext .hwait { padding-top: 60px; font-size: 34px; font-weight: 600; color: #A1A1AA; }
+#herotext .hwhere .badge img { width: 32px; height: 32px; }
+#herotext .hwhere .badge.netflix img { width: 18px; height: 28px; margin: 2px 7px; }
+#herotext .hwhere .badge.word { width: auto; padding: 0 8px; font-size: 13px; line-height: 32px; }
+#herotext .hwait { position: relative; top: -260px; font-size: 34px; font-weight: 600; color: #A1A1AA; }
 
 /* Genres under the tabs: as the tabs, the applied one is white, the focused one a red pill. */
-#genres { position: absolute; left: 62px; top: 236px; width: 1080px; white-space: normal; font-family: 'Inter', sans-serif; }
+#genres { position: absolute; left: 62px; top: 240px; height: 52px; white-space: nowrap; font-family: 'Inter', sans-serif; }
 #genres .genre {
-  display: inline-block; height: 52px; line-height: 52px; padding: 0 20px; margin: 0 4px 4px 0; border-radius: 26px;
+  display: inline-block; height: 52px; line-height: 52px; padding: 0 20px; margin-right: 4px; border-radius: 26px;
   font-size: 25px; font-weight: 600; color: #8C8C96;
 }
 #genres .genre.on { color: #F5F5F7; }
 .night #genres .genre.focus { background: #E5484D; color: #FFF; }
 
-/* Posters: one size; the focused one rises a little and its edge lights up in the accent. */
-.card { top: 580px; width: 140px; height: 210px; }
-.card .img { border-radius: 12px; }
-.card .img::after { border-radius: 12px; }
-.card.focus { -webkit-transform: translateY(-6px) scale(1.08); transform: translateY(-6px) scale(1.08); }
+/* The row around the stage: no sliding holder, each card placed by its distance to the focus. */
+.card { top: 382px; width: 180px; height: 270px; -webkit-transition: opacity 0.2s; transition: opacity 0.2s; }
+.card.side { opacity: 0.62; }
+.card.far { opacity: 0.32; }
+.card.off { display: none; }
+.card.stage { top: 312px; width: 720px; height: 405px; opacity: 1; }
+.card .img, .card .img::after { border-radius: 14px; }
+.card.stage .img, .card.stage .img::after { border-radius: 18px; }
+.card .back { opacity: 0; }
+.card.stage .back { opacity: 1; }
+.card.stage .img::before {
+  content: ''; position: absolute; left: 0; top: 0; right: 0; bottom: 0; z-index: 1; border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.12); border-top-color: rgba(255, 90, 95, 0.45);
+}
+.card.stage.pulsa .img::after { -webkit-animation: pulso-palco 0.7s ease-out; animation: pulso-palco 0.7s ease-out; }
+@-webkit-keyframes pulso-palco { 0% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes pulso-palco { 0% { opacity: 1; } 100% { opacity: 0; } }
+.card.focus { -webkit-transform: none; transform: none; }
 .card .badge { left: 8px; top: auto; bottom: 8px; width: 40px; height: 40px; border-radius: 10px; }
 .card .badge img { width: 40px; height: 40px; }
 .card .badge.netflix img { width: 22px; height: 34px; margin: 3px 9px; }
