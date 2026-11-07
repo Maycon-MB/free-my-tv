@@ -291,16 +291,18 @@
   /** Opens a title in its app, on the title's page when Wikidata knows its id there (else on the app's home). */
   // Apps that hang on a link when it comes with a cold start: the service opens them plain, then sends the title.
   var WARM_FIRST = {disney: true};
-  var opening = 0;
+  // Opening a title: one at a time. A second OK while one opens says so instead of doing nothing; after
+  // OPEN_WAIT the attempt counts as over, so a lost answer never locks the button.
+  var OPEN_WAIT = 15000, opening = {at: 0, title: ''};
 
   function openTitle(p, app, params) {
     rememberTitle(p);
     if (params || !p.app) { launcher(app.id, app.title, params)(); return null; }
-    if (Date.now() - opening < 10000) return true;
-    opening = Date.now();
+    if (Date.now() - opening.at < OPEN_WAIT) { toast('Ainda abrindo “' + opening.title + '”…'); return true; }
+    opening = {at: Date.now(), title: p.title};
     toast('Abrindo ' + app.title + '…');
     Data.titleLink(p, p.app, function (params) {
-      opening = 0;
+      opening = {at: 0, title: ''};
       if (!params) {
         launcher(app.id, app.title, null)();
         toast('Abrindo ' + app.title + ': procure “' + p.title + '” lá dentro.');
@@ -429,8 +431,9 @@
     for (var i = 0; i < rows.length; i++) setClass(rows[i], 'focus', on && i === index);
     var holder = sheet.querySelector('.rows');
     if (!holder) return;
-    var visible = 7, first = Math.max(0, Math.min(rows.length - visible, index - 3));
-    holder.style.webkitTransform = holder.style.transform = 'translateY(' + (-first * 78) + 'px)';
+    var room = holder.parentNode.offsetHeight, at = rows[index] ? rows[index].offsetTop : 0;
+    var shift = Math.max(0, Math.min(holder.offsetHeight - room, at - 3 * 78));   // focused row 4th from the top
+    holder.style.webkitTransform = holder.style.transform = 'translateY(' + (-shift) + 'px)';
   }
 
   function nearest(nodes, x) {
@@ -1915,7 +1918,38 @@
     rows.push({label: tr('Shelf'), value: '›', shelf: true, step: function (d) { if (d >= 0) openShelfEdit(); }});
     rows.push({label: tr('About this TV'), value: '›', about: true, step: function (d) { if (d >= 0) openAbout(); }});
     if (TV.canOpenSettings) rows.push({label: tr('TV Settings'), value: '›', step: function (d) { if (d >= 0) tvSettings(); }});
-    return rows;
+    return inSections(rows, sv);
+  }
+
+  // Home Settings in named groups, so each option is found by what it changes; the order inside a group is kept.
+  function inSections(rows, services) {
+    var groups = [
+      ['Perfil', ['Perfil', 'Nome do perfil', 'Cor de destaque', 'Fundo', 'Constelação em movimento', tr('Theme'),
+        'Modo infantil', 'Novo perfil', 'Excluir este perfil']],
+      ['Tela inicial', ['Topo: jogos dos meus times', 'Topo: Fórmula 1', 'Topo: manchetes', 'Times', tr('Shelf'),
+        'Ordem dos apps', 'Destaque girando', tr('Picks per tab'), tr('Cartoons and anime'), 'Painel de desempenho',
+        tr('Weather widget'), tr('City'), tr('Forecast')]],
+      ['Tela de descanso', [tr('Screensaver'), tr('Watch from the screensaver'), tr('Dim')]],
+      ['Filmes e séries', [tr('Picks from'), tr('Open picks in'), tr('TMDB key')]],
+      ['Celular e TV', ['Controle pelo celular', 'Esquecer celulares pareados', 'Voltar ao Free My TV', tr('Language'),
+        tr('Temperature'), tr('About this TV'), tr('TV Settings')]],
+      ['Ajuda', ['Ajuda: onde fica cada coisa']],
+      ['Cotações', [tr('Quotes widget')]]
+    ];
+    var serviceNames = (services || []).map(function (s) { return s.name; }), out = [], g, i;
+    function place(r) {
+      if (/^Confirmar: excluir/.test(r.label)) return 0;
+      for (var k = 0; k < groups.length; k++) if (groups[k][1].indexOf(r.label) >= 0) return k;
+      return serviceNames.indexOf(r.label) >= 0 ? 3 : groups.length - 1;   // services follow "Picks from"; coins
+    }
+    for (g = 0; g < groups.length; g++) {
+      for (i = 0; i < rows.length; i++) {
+        if (place(rows[i]) !== g) continue;
+        rows[i].sec = groups[g][0];
+        out.push(rows[i]);
+      }
+    }
+    return out;
   }
 
   function cycle(name, values, current, d) {
@@ -1935,7 +1969,9 @@
     rowsNow = settingRows();
     list.style.height = Math.min(rowsNow.length, 7) * 78 + 'px';
     for (var i = 0; i < rowsNow.length; i++) {
-      var r = rowsNow[i], row = el('div', 'row' + (r.dim ? ' dim' : ''), holder, r.label);
+      var r = rowsNow[i];
+      if (r.sec && (!i || rowsNow[i - 1].sec !== r.sec)) el('div', 'sechead', holder, r.sec);
+      var row = el('div', 'row' + (r.dim ? ' dim' : ''), holder, r.label);
       if (r.toggle !== undefined) setClass(el('div', 'toggle', row), 'on', r.toggle);
       else {
         var v = el('span', 'value', row);
@@ -3008,6 +3044,13 @@
   function reset() {
     hideSaver();
     hideAmbient();
+    // Home (or opening the app again) lands on the home screen, whatever page was open
+    if ($('searchpage').className.indexOf('open') >= 0) closeSearch();
+    if ($('detail').className.indexOf('open') >= 0) closeDetail();
+    if ($('pairing').className.indexOf('open') >= 0) closePairing();
+    setClass($('help'), 'open', false);
+    setClass($('controls'), 'open', false);
+    setClass($('teampick'), 'open', false);
     closeSheets();
     st.zone = Z.SHELF;
     st.shelf = 0;

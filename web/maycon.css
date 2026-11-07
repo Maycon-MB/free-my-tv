@@ -572,3 +572,8 @@ body:not(.night) #morehint { color: #6E6E73; }
 /* Words in Inter, sentence case: capitals spaced out read worse from the couch. Mono stays for numbers. */
 #tilename { font-family: 'Inter', sans-serif; text-transform: none; letter-spacing: 0; font-size: 26px; font-weight: 700; }
 #morehint { font-family: 'Inter', sans-serif; text-transform: none; letter-spacing: 0; font-size: 23px; font-weight: 600; }
+
+/* Home Settings' group titles: not focusable, they name what the rows below change. */
+.box .sechead { height: 48px; line-height: 56px; padding: 0 24px; font-family: 'Inter', sans-serif; font-size: 23px;
+  font-weight: 700; color: #FF7A7F; }
+.box .sechead:first-child { height: 40px; line-height: 40px; }
