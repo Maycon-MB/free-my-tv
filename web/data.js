@@ -554,10 +554,10 @@ var Data = (function () {
 
   // MARK: - Genres: the picks of one genre, only from the TV's apps (the home screen's chips and Search's)
 
-  // TMDB's ids differ between movies and shows; a genre without a show id (Horror, Romance) brings only movies.
+  // TMDB's ids differ between movies and shows; Horror and Romance shows come by keyword (tvKeyword).
   var GENRES = [{name: 'Tudo'}, {name: 'Comédia', movie: 35, tv: 35}, {name: 'Ação', movie: 28, tv: 10759},
-    {name: 'Drama', movie: 18, tv: 18}, {name: 'Terror', movie: 27}, {name: 'Animação', movie: 16, tv: 16},
-    {name: 'Crime', movie: 80, tv: 80}, {name: 'Romance', movie: 10749}, {name: 'Documentário', movie: 99, tv: 99},
+    {name: 'Drama', movie: 18, tv: 18}, {name: 'Terror', movie: 27, tvKeyword: 315058}, {name: 'Animação', movie: 16, tv: 16},
+    {name: 'Crime', movie: 80, tv: 80}, {name: 'Romance', movie: 10749, tvKeyword: 9840}, {name: 'Documentário', movie: 99, tv: 99},
     {name: 'Família', movie: 10751, tv: 10751}];
   var GENRE_MAX = 14, GENRE_KEEP = 6 * 3600000, GENRE_RETRY = 60000, genreLists = {}, providerIds = null;
 
@@ -591,8 +591,10 @@ var Data = (function () {
       if (!ids.length) { genreLists[genreKey(kind, g)] = {at: Date.now(), list: []}; done([]); return; }
       var found = {movie: [], tv: []}, kinds = kind ? [kind] : ['movie', 'tv'];
       each(kinds, function (k, next) {
-        if (!g[k]) { next(); return; }
-        tmdb('/discover/' + k + '?with_genres=' + g[k] + '&vote_count.gte=' + (k === 'movie' ? 50 : 20) + '&language=' + lang()
+        // TMDB has no Horror or Romance genre for shows: those come by its keyword instead
+        var filter = g[k] ? 'with_genres=' + g[k] : k === 'tv' && g.tvKeyword ? 'with_keywords=' + g.tvKeyword : '';
+        if (!filter) { next(); return; }
+        tmdb('/discover/' + k + '?' + filter + '&vote_count.gte=' + (k === 'movie' ? 50 : 20) + '&language=' + lang()
             + '&watch_region=' + REGION + '&with_watch_monetization_types=flatrate%7Cfree%7Cads&include_adult=false'
             + '&sort_by=popularity.desc&with_watch_providers=' + encodeURIComponent(ids.join('|')), function (e, r) {
           for (var j = 0; !e && r.results && j < r.results.length; j++) addPick(found[k], r.results[j], k);
