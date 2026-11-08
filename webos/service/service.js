@@ -8,6 +8,26 @@ var net = require('net');
 var Service = require('webos-service');
 
 var service = new Service(require('./package.json').name);
+var PRIVATE = 384;   // 0600: only this user reads the file
+
+// Every method answers only Free My TV's page and the shell of Developer Mode (the owner's SSH): another app on the
+// TV could otherwise read the pairing code, turn the TV off or type into other apps. The first callers seen go to
+// the notes, to check the sender names on the TV.
+var CALLERS = /^(io\.freemytv|com\.webos\.lunasend)/, callersSeen = {};
+
+function trusted(message) {
+  var who = String(message.sender || message.senderId || '');
+  if (!callersSeen[who]) { callersSeen[who] = true; note('chamado por ' + (who || '(sem nome)')); }
+  return !who || CALLERS.test(who);
+}
+
+var registerOpen = service.register.bind(service);
+service.register = function (name, handler, cancel) {
+  return registerOpen(name, function (message) {
+    if (!trusted(message)) { message.respond({returnValue: false, errorText: 'Not allowed'}); return; }
+    handler(message);
+  }, cancel);
+};
 
 // What the page may ask the TV's remote control API for, and the permissions the TV asks the person once to allow.
 var PERMISSIONS = ['READ_INSTALLED_APPS', 'READ_RUNNING_APPS', 'READ_INPUT_DEVICE_LIST', 'CONTROL_INPUT_TV',
@@ -247,7 +267,10 @@ service.register('backup', function (message) {
     var data = String(p.data || '');
     try { JSON.parse(data); } catch (e) { message.respond({returnValue: false, errorText: 'not JSON'}); return; }
     if (data.length > 100000) { message.respond({returnValue: false, errorText: 'too big'}); return; }
-    fs.writeFile(BACKUP, data, function (err) { message.respond({returnValue: !err}); });
+    fs.writeFile(BACKUP, data, {mode: PRIVATE}, function (err) {
+      fs.chmod(BACKUP, PRIVATE, function () {});   // mode applies only when the file is new
+      message.respond({returnValue: !err});
+    });
   } else {
     fs.readFile(BACKUP, 'utf8', function (err, data) {
       message.respond(err ? {returnValue: true, data: ''} : {returnValue: true, data: data});
@@ -278,7 +301,7 @@ var keepAsking = false;
 
 /** Keeps the service alive exactly while a timer, a reminder or a match watch is pending. */
 function hold() {
-  var need = !!(sleepTimer || watchTimer || reminderTimer || phone.server || back.on || warm.id);
+  var need = !!(sleepTimer || watchTimer || reminderTimer || phone.server || back.on || warm.id || later.text);
   if (!service.activityManager) return;
   if (need && !keepAlive && !keepAsking) {
     keepAsking = true;
@@ -427,7 +450,14 @@ function titles(xml) {
 // MARK: - Prime Video's own id for a title (amzn1.dv.gti...): its app opens a title from that id only, and no open
 // catalogue has it for Brazil. Found as a person would: Prime's search page, then the title's page.
 
-var PRIME = 'https://www.primevideo.com', primeIds = {};
+var PRIME = 'https://www.primevideo.com', primeIds = {}, LINK_CACHE = 200;
+
+/** Keeps a title's id for the service's life, starting over past LINK_CACHE titles. */
+function remember(cache, key, value) {
+  if (Object.keys(cache).length >= LINK_CACHE) for (var k in cache) delete cache[k];
+  cache[key] = value;
+  return value;
+}
 
 /** A Prime page's HTML (redirects followed only within primevideo.com), or '' on any failure. */
 function primePage(path, done, hops) {
@@ -461,16 +491,17 @@ function primeId(title, done) {
   var want = plainTitle(title);
   if (primeIds[want] !== undefined) { done(primeIds[want]); return; }
   primePage('/-/pt/search/ref=atv_nb_sug?phrase=' + encodeURIComponent(title), function (html) {
-    var re = /data-card-title="([^"]*)"[\s\S]*?href="\/-\/pt\/detail\/([A-Za-z0-9]+)/g, m, page = '';
+    var re = /data-card-title="([^"]*)"/g, m, page = '';
     while ((m = re.exec(html)) && !page) {
       var name = plainTitle(m[1]);
-      if (name === want || (want.length > 3 && name.slice(-want.length - 1) === ' ' + want)) page = m[2];
+      if (name !== want && !(want.length > 3 && name.slice(-want.length - 1) === ' ' + want)) continue;
+      var link = /href="\/-\/pt\/detail\/([A-Za-z0-9]+)/.exec(html.slice(m.index, m.index + 4000));   // its own card
+      if (link) page = link[1];
     }
-    if (!page) { primeIds[want] = ''; done(''); return; }
+    if (!page) { done(remember(primeIds, want, '')); return; }
     primePage('/-/pt/detail/' + page, function (detail) {
       var id = /"pageTitleId":"(amzn1\.dv\.gti\.[0-9a-f-]+)"/.exec(detail);
-      primeIds[want] = id ? id[1] : '';
-      done(primeIds[want]);
+      done(remember(primeIds, want, id ? id[1] : ''));
     });
   });
 }
@@ -493,8 +524,7 @@ function appleUrl(title, done) {
       while ((m = re.exec(body)) && !found) {
         if (plainTitle(m[2].replace(/-+/g, ' ')) === want) found = 'https://tv.apple.com/br/' + m[1] + '/' + m[2] + '/' + m[3];
       }
-      appleUrls[want] = found;
-      done(found);
+      done(remember(appleUrls, want, found));
     });
   });
   req.on('error', function () { done(''); });
@@ -576,9 +606,9 @@ service.register('remind', function (message) {
 
 var http = require('http'), os = require('os'), crypto = require('crypto');
 var PHONES = '/media/developer/temp/freemytv-phones.json';
-var phone = {server: null, code: '', codeAt: 0, text: '', port: 8770, fails: {}, searching: false, tokens: null,
+var phone = {server: null, code: '', codeAt: 0, text: '', port: 8770, fails: {}, wrong: 0, searching: false, tokens: null,
   pointer: null, host: ''};
-var CODE_TTL = 120000, MAX_FAILS = 5;
+var CODE_TTL = 120000, MAX_FAILS = 5, CODE_FAILS = 10;
 
 function sha256(text) { return crypto.createHash('sha256').update(String(text)).digest('hex'); }
 
@@ -611,6 +641,7 @@ function newCode() {
   phone.code = String(100000 + crypto.randomBytes(4).readUInt32BE(0) % 900000);
   phone.codeAt = Date.now();
   phone.fails = {};
+  phone.wrong = 0;
 }
 
 function pairedBy(req) {
@@ -625,13 +656,17 @@ function pairedBy(req) {
 function pair(code, req, res) {
   var who = String(req.socket.remoteAddress || ''), fails = phone.fails[who] || 0;
   var live = phone.code && Date.now() - phone.codeAt < CODE_TTL;
-  if (fails >= MAX_FAILS || !live || code !== phone.code) { phone.fails[who] = fails + 1; return false; }
+  if (fails >= MAX_FAILS || !live || code !== phone.code) {
+    phone.fails[who] = fails + 1;
+    if (++phone.wrong >= CODE_FAILS) phone.code = '';   // many addresses guessing: this code is gone
+    return false;
+  }
   phone.code = '';
   var token = crypto.randomBytes(16).toString('hex'), list = tokens();
   list.push(sha256(token));
   if (list.length > 8) list.shift();
-  fs.writeFile(PHONES, JSON.stringify(list), function () {});
-  res.setHeader('Set-Cookie', 'fmtv=' + token + '; Max-Age=15552000; Path=/; HttpOnly; SameSite=Strict');
+  fs.writeFile(PHONES, JSON.stringify(list), {mode: PRIVATE}, function () { fs.chmod(PHONES, PRIVATE, function () {}); });
+  res.setHeader('Set-Cookie', 'fmtv=' + token + '; Max-Age=2592000; Path=/; HttpOnly; SameSite=Strict');   // 30 days
   toast('Celular pareado como controle da TV.');
   return true;
 }
@@ -683,6 +718,56 @@ function pressKey(name) {
   });
 }
 
+// MARK: - A title for an app that can't open on it: typed by itself the first time a text field in another app
+// takes the focus (its search, opened by the person), within 3 minutes of the app opening.
+
+var TYPE_WAIT = 180000, later = {text: '', conn: null, timer: null};
+
+function stopTypeLater() {
+  clearTimeout(later.timer);
+  later.text = '';
+  if (later.conn) later.conn.close();
+  later.conn = null;
+  hold();
+}
+
+/** Listens for a focused text field; the TV drops the socket every ~40 s, so it reconnects while a title waits. */
+function watchKeyboard(key) {
+  later.conn = ssapSocket(key, {
+    registered: function () {
+      later.conn.send({type: 'subscribe', id: 'kb', uri: 'ssap://com.webos.service.ime/registerRemoteKeyboard'});
+    },
+    message: function (m) {
+      var w = m.id === 'kb' && m.payload && m.payload.currentWidget;
+      if (!w || !w.focus || !later.text || back.prev !== later.appId) return;   // only into the app it was opened for
+      call('com.webos.service.ime/insertText', key, {text: later.text, replace: 0}, function () {});
+      stopTypeLater();
+    },
+    end: function () {
+      later.conn = null;
+      if (later.text) setTimeout(function () { if (later.text && !later.conn) watchKeyboard(key); }, 1000);
+    }
+  });
+}
+
+/** {title, appId, clientKey?}: types the title when a text field of that app gets focus,
+ * within TYPE_WAIT. returnValue false: no title, app id or TV key. */
+service.register('typeLater', function (message) {
+  var p = message.payload || {};
+  if (p.clientKey) lastKey = p.clientKey;
+  var key = lastKey || back.key;
+  stopTypeLater();
+  warmStop();   // one pending title at a time
+  if (!p.title || !key || !/^[\w.-]+$/.test(p.appId || '')) { message.respond({returnValue: false}); return; }
+  later.text = String(p.title).slice(0, 80);
+  later.appId = p.appId;
+  later.timer = setTimeout(stopTypeLater, TYPE_WAIT);
+  watchKeyboard(key);
+  watchForeground();
+  hold();
+  message.respond({returnValue: true});
+});
+
 /** Text from the phone: Free My TV's search takes it when open; otherwise the TV's keyboard types it. */
 function typeText(text) {
   if (phone.searching) { phone.text = text; return; }
@@ -718,7 +803,7 @@ var PAIR_PAGE = '<!doctype html><meta name=viewport content="width=device-width,
 
 function body(req, done) {
   var text = '';
-  req.on('data', function (c) { if (text.length < 2000) text += c; });
+  req.on('data', function (c) { text += c; if (text.length > 2000) req.destroy(); });
   req.on('end', function () { done(require('querystring').parse(text)); });
 }
 
@@ -1049,12 +1134,14 @@ var back = {on: false, conn: null, key: null, prev: '', at: 0, retry: null, log:
 // The web app's errors and what it opened, kept in memory: luna-send-pub .../notes {} reads them from a computer.
 var notes = [];
 
+function note(text) {
+  notes.push(new Date().toISOString().slice(11, 19) + ' ' + String(text).slice(0, 300));
+  if (notes.length > 40) notes.shift();
+}
+
 service.register('notes', function (message) {
   var p = message.payload || {};
-  if (p.text) {
-    notes.push(new Date().toISOString().slice(11, 19) + ' ' + String(p.text).slice(0, 300));
-    if (notes.length > 40) notes.shift();
-  }
+  if (p.text) note(p.text);
   message.respond({returnValue: true, notes: p.text ? undefined : notes.slice(-40)});
 });
 
@@ -1071,16 +1158,17 @@ function onForeground(appId) {
   if (!appId) return;   // empty while switching
   backLog(back.prev + ' -> ' + appId);
   if (warm.id && appId === warm.id) warmArrived();
-  if (LG_HOME.test(appId) && Date.now() - back.at > 3000) {   // once per visit, even if the home reports twice
+  if (back.on && LG_HOME.test(appId) && Date.now() - back.at > 3000) {   // once per visit, even if the home reports twice
     back.at = Date.now();
     launchHome();
   }
   back.prev = appId;
 }
 
+/** The app in front, watched while Back to Free My TV is on or a title waits for its app (openWarm, typeLater). */
 function watchForeground() {
-  if (!back.on || back.conn) return;
-  back.conn = ssapSocket(back.key, {
+  if (!(back.on || warm.id || later.text) || back.conn) return;
+  back.conn = ssapSocket(back.key || lastKey, {
     registered: function (key) {
       back.key = key;
       back.conn.send({type: 'subscribe', id: 'fg', uri: 'ssap://com.webos.applicationManager/getForegroundAppInfo'});
@@ -1091,7 +1179,7 @@ function watchForeground() {
     },
     end: function () {
       back.conn = null;
-      if (back.on) back.retry = setTimeout(watchForeground, 2000);   // the TV's API drops it now and then
+      if (back.on || warm.id || later.text) back.retry = setTimeout(watchForeground, 2000);   // the TV drops it now and then
     }
   });
 }
@@ -1127,14 +1215,18 @@ function warmArrived() {
   });
 }
 
+/** {id, params, title?}: opens the app plain, then sends params once it's in front. returnValue false:
+ * bad id or no params; warm false: the app was already in front, so params went at once. */
 service.register('openWarm', function (message) {
   var p = message.payload || {};
+  stopTypeLater();   // one pending title at a time
   if (!/^[\w.-]+$/.test(p.id || '') || !p.params) { message.respond({returnValue: false}); return; }
   if (back.prev === p.id) { launchApp(p.id, p.params); message.respond({returnValue: true, warm: false}); return; }
   warmStop();
   warm.id = p.id;
   warm.params = p.params;
   warm.giveUp = setTimeout(warmStop, 60000);   // never arrived: forget it
+  watchForeground();
   launchApp(p.id, null);
   if (p.title) toast('Abrindo “' + String(p.title).slice(0, 40) + '”. Se pedir perfil, escolha: o título vem em seguida.');
   hold();

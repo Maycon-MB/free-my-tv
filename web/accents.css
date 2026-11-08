@@ -31,6 +31,8 @@ body.accent-pink #football .news .src { color: #F9A8D4; }
 body.accent-pink .box .sechead { color: #F9A8D4; }
 body.accent-pink #hero::before { background: -webkit-radial-gradient(50% 35%, ellipse, rgba(236, 72, 153, 0.14), rgba(236, 72, 153, 0) 60%); background: radial-gradient(ellipse at 50% 35%, rgba(236, 72, 153, 0.14), rgba(236, 72, 153, 0) 60%); }
 body.accent-pink.night #genres .genre.focus { background: #EC4899; }
+body.accent-pink .key.focus, body.accent-pink.night .key.focus { background: #EC4899; }
+body.accent-pink .box .row.focus { background: #EC4899; }
 body.accent-blue.night .tab.focus { background: #3B82F6; }
 body.accent-blue.night .round.focus { background: #3B82F6; border-color: #3B82F6; }
 body.accent-blue.night .round.focus .tip { color: #7FB0FF; }
@@ -63,6 +65,8 @@ body.accent-blue #football .news .src { color: #7FB0FF; }
 body.accent-blue .box .sechead { color: #7FB0FF; }
 body.accent-blue #hero::before { background: -webkit-radial-gradient(50% 35%, ellipse, rgba(59, 130, 246, 0.14), rgba(59, 130, 246, 0) 60%); background: radial-gradient(ellipse at 50% 35%, rgba(59, 130, 246, 0.14), rgba(59, 130, 246, 0) 60%); }
 body.accent-blue.night #genres .genre.focus { background: #3B82F6; }
+body.accent-blue .key.focus, body.accent-blue.night .key.focus { background: #3B82F6; }
+body.accent-blue .box .row.focus { background: #3B82F6; }
 body.accent-green.night .tab.focus { background: #22C55E; }
 body.accent-green.night .round.focus { background: #22C55E; border-color: #22C55E; }
 body.accent-green.night .round.focus .tip { color: #6EE7A0; }
@@ -95,6 +99,8 @@ body.accent-green #football .news .src { color: #6EE7A0; }
 body.accent-green .box .sechead { color: #6EE7A0; }
 body.accent-green #hero::before { background: -webkit-radial-gradient(50% 35%, ellipse, rgba(34, 197, 94, 0.14), rgba(34, 197, 94, 0) 60%); background: radial-gradient(ellipse at 50% 35%, rgba(34, 197, 94, 0.14), rgba(34, 197, 94, 0) 60%); }
 body.accent-green.night #genres .genre.focus { background: #22C55E; }
+body.accent-green .key.focus, body.accent-green.night .key.focus { background: #22C55E; }
+body.accent-green .box .row.focus { background: #22C55E; }
 body.accent-purple.night .tab.focus { background: #8B5CF6; }
 body.accent-purple.night .round.focus { background: #8B5CF6; border-color: #8B5CF6; }
 body.accent-purple.night .round.focus .tip { color: #B9A0FF; }
@@ -127,6 +133,8 @@ body.accent-purple #football .news .src { color: #B9A0FF; }
 body.accent-purple .box .sechead { color: #B9A0FF; }
 body.accent-purple #hero::before { background: -webkit-radial-gradient(50% 35%, ellipse, rgba(139, 92, 246, 0.14), rgba(139, 92, 246, 0) 60%); background: radial-gradient(ellipse at 50% 35%, rgba(139, 92, 246, 0.14), rgba(139, 92, 246, 0) 60%); }
 body.accent-purple.night #genres .genre.focus { background: #8B5CF6; }
+body.accent-purple .key.focus, body.accent-purple.night .key.focus { background: #8B5CF6; }
+body.accent-purple .box .row.focus { background: #8B5CF6; }
 body.accent-orange.night .tab.focus { background: #F97316; }
 body.accent-orange.night .round.focus { background: #F97316; border-color: #F97316; }
 body.accent-orange.night .round.focus .tip { color: #FFAB70; }
@@ -159,6 +167,8 @@ body.accent-orange #football .news .src { color: #FFAB70; }
 body.accent-orange .box .sechead { color: #FFAB70; }
 body.accent-orange #hero::before { background: -webkit-radial-gradient(50% 35%, ellipse, rgba(249, 115, 22, 0.14), rgba(249, 115, 22, 0) 60%); background: radial-gradient(ellipse at 50% 35%, rgba(249, 115, 22, 0.14), rgba(249, 115, 22, 0) 60%); }
 body.accent-orange.night #genres .genre.focus { background: #F97316; }
+body.accent-orange .key.focus, body.accent-orange.night .key.focus { background: #F97316; }
+body.accent-orange .box .row.focus { background: #F97316; }
 body.accent-yellow.night .tab.focus { background: #FFE100; color: #1D1D1B; }
 body.accent-yellow.night .round.focus { background: #FFE100; border-color: #FFE100; color: #1D1D1B; }
 body.accent-yellow.night .round.focus .tip { color: #FFE97A; }
@@ -191,3 +201,5 @@ body.accent-yellow #football .news .src { color: #FFE97A; }
 body.accent-yellow .box .sechead { color: #FFE97A; }
 body.accent-yellow #hero::before { background: -webkit-radial-gradient(50% 35%, ellipse, rgba(255, 225, 0, 0.14), rgba(255, 225, 0, 0) 60%); background: radial-gradient(ellipse at 50% 35%, rgba(255, 225, 0, 0.14), rgba(255, 225, 0, 0) 60%); }
 body.accent-yellow.night #genres .genre.focus { background: #FFE100; color: #1D1D1B; }
+body.accent-yellow .key.focus, body.accent-yellow.night .key.focus { background: #FFE100; color: #1D1D1B; }
+body.accent-yellow .box .row.focus { background: #FFE100; color: #1D1D1B; }

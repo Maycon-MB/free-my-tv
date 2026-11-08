@@ -266,12 +266,18 @@
     spotify: 'icons/spotify.svg'
   };
 
+  /** A service's logo in box: Netflix's bundled one, else its app's icon from the TV. False when there is neither. */
+  function serviceLogo(key, app, box) {
+    if (key === 'netflix') el('img', '', box).src = BRAND_LOGOS.netflix;
+    else if (app && app.icon) el('img', '', box).src = app.icon;
+    else return false;
+    return true;
+  }
+
   /** Where a pick streams, at a glance: the service's logo (or its name) in the card's corner. */
   function serviceBadge(p, holder) {
-    var app = Data.appFor(p.app), badge = el('div', 'badge', holder);
-    if (p.app === 'netflix') { badge.className += ' netflix'; el('img', '', badge).src = BRAND_LOGOS.netflix; }
-    else if (app && app.icon) el('img', '', badge).src = app.icon;   // the same icon as on the TV's own launcher
-    else { badge.className += ' word'; badge.textContent = p.service; }
+    var badge = el('div', 'badge' + (p.app === 'netflix' ? ' netflix' : ''), holder);
+    if (!serviceLogo(p.app, Data.appFor(p.app), badge)) { badge.className += ' word'; badge.textContent = p.service; }
   }
 
   /** The icons of the TV's apps a title streams on (up to 3), in a poster's corner: recognized before read. */
@@ -282,32 +288,30 @@
       if (!app) continue;
       if (!box) box = el('div', 'appicons', holder);
       var icon = el('div', 'appicon' + (keys[i] === 'netflix' ? ' netflix' : ''), box);
-      if (keys[i] === 'netflix') el('img', '', icon).src = BRAND_LOGOS.netflix;
-      else if (app.icon) el('img', '', icon).src = app.icon;
-      else icon.textContent = app.title.charAt(0);
+      if (!serviceLogo(keys[i], app, icon)) icon.textContent = app.title.charAt(0);
     }
   }
 
-  /** Opens a title in its app, on the title's page when Wikidata knows its id there (else on the app's home). */
-  // Apps that hang on a link when it comes with a cold start: the service opens them plain, then sends the title.
-  var WARM_FIRST = {disney: true, prime: true, appletv: true};
   // Opening a title: one at a time. A second OK while one opens says so instead of doing nothing; after
   // OPEN_WAIT the attempt counts as over, so a lost answer never locks the button.
   var OPEN_WAIT = 15000, opening = {at: 0, title: ''};
 
-  function openTitle(p, app, params) {
-    note('abrir ' + p.title + ' em ' + app.id + (params ? ' com link' : ''));
+  /** Opens a title in its app, on the title's page when its link is known (else on the app's home). */
+  function openTitle(p, app) {
+    note('abrir ' + p.title + ' em ' + app.id);
     rememberTitle(p);
-    if (params || !p.app) { launcher(app.id, app.title, params)(); return null; }
-    if (Date.now() - opening.at < OPEN_WAIT) { toast('Ainda abrindo “' + opening.title + '”…'); return true; }
+    if (!p.app) { launcher(app.id, app.title, null)(); return; }
+    if (Date.now() - opening.at < OPEN_WAIT) { toast('Ainda abrindo “' + opening.title + '”…'); return; }
     opening = {at: Date.now(), title: p.title};
     toast('Abrindo ' + app.title + '…');
-    Data.titleLink(p, p.app, function (params) {
+    Data.titleLink(p, p.app, function (params, warm) {
       opening = {at: 0, title: ''};
       if (!params) {
         launcher(app.id, app.title, null)();
+        // Tried quietly: apps that draw their own keyboard (Globoplay) never tell the TV a field took the focus
+        TV.service('typeLater', {title: p.title, appId: app.id});
         toast('Abrindo ' + app.title + ': procure “' + p.title + '” lá dentro.');
-      } else if (WARM_FIRST[p.app]) {
+      } else if (warm) {
         countLaunch(app.id);
         TV.service('openWarm', {id: app.id, params: params, title: p.title}, function (res) {
           if (!res) launcher(app.id, app.title, params)();   // no service (another TV): straight
@@ -316,7 +320,6 @@
         launcher(app.id, app.title, params)();
       }
     });
-    return true;
   }
 
   /** An app's face: its logo on its brand color (or its name, when the icon can't be read). */
@@ -378,19 +381,20 @@
       for (var r = 0; r < apps.length; r++) if (out.indexOf(apps[r]) < 0) out.push(apps[r]);
     }
     shelf = Prefs.get('shelfOrder', 'manual') === 'usage' ? byUsage(out) : out;
-    // All Apps lists every app, by name: with every app on the shelf by default, "the rest" was an empty sheet
+    // All Apps lists every app by name, the shelf's too: by default the shelf already holds them all.
     others = apps.slice().sort(function (x, y) { return x.title.localeCompare(y.title); });
   }
 
   // MARK: - Focus
 
-  var Z = {TOP: 'top', GENRE: 'genre', CARDS: 'cards', SHELF: 'shelf', DRAWER: 'drawer', APPS: 'apps', SETTINGS: 'settings', EDIT: 'edit', LANG: 'lang', CITY: 'city', KEY: 'key', ABOUT: 'about', SEARCH: 'search', TEAMS: 'teams', CTRL: 'ctrl', HELP: 'help', DETAIL: 'detail', PAIR: 'pair'};
+  var Z = {TOP: 'top', GENRE: 'genre', CARDS: 'cards', SHELF: 'shelf', DRAWER: 'drawer', APPS: 'apps', SETTINGS: 'settings', EDIT: 'edit', LANG: 'lang', CITY: 'city', KEY: 'key', ABOUT: 'about', SEARCH: 'search', TEAMS: 'teams', CTRL: 'ctrl', NET: 'net', HELP: 'help', DETAIL: 'detail', PAIR: 'pair'};
   var st = {zone: Z.SHELF, top: 0, tab: 0, card: 0, shelf: 0, drawer: 0, grid: 0, row: 0, edit: 0, lang: 0, city: 0, key: 0};
   var cards = [];
   var genreAt = 0, genreTimer = 0;   // the chip with focus; st.genre is the one applied
+  var heroWait = '';   // the stage's line while a genre's titles load
   st.genre = 0;
 
-  function sheetOpen() { return st.zone === Z.APPS || st.zone === Z.SETTINGS || st.zone === Z.EDIT || st.zone === Z.LANG || st.zone === Z.CITY || st.zone === Z.KEY || st.zone === Z.ABOUT || st.zone === Z.SEARCH || st.zone === Z.TEAMS || st.zone === Z.CTRL || st.zone === Z.HELP || st.zone === Z.DETAIL || st.zone === Z.PAIR; }
+  function sheetOpen() { return st.zone === Z.APPS || st.zone === Z.SETTINGS || st.zone === Z.EDIT || st.zone === Z.LANG || st.zone === Z.CITY || st.zone === Z.KEY || st.zone === Z.ABOUT || st.zone === Z.SEARCH || st.zone === Z.TEAMS || st.zone === Z.CTRL || st.zone === Z.NET || st.zone === Z.HELP || st.zone === Z.DETAIL || st.zone === Z.PAIR; }
 
   function updateFocus() {
     var i, list;
@@ -429,6 +433,7 @@
     focusSearch();
     focusRows($('teampick'), tmRow, st.zone === Z.TEAMS);
     focusRows($('controls'), ctrlRow, st.zone === Z.CTRL);
+    focusRows($('netpanel'), NET_STATUS + netRow, st.zone === Z.NET);
     var dbs = document.querySelectorAll('#detail .dbtn');
     for (i = 0; i < dbs.length; i++) setClass(dbs[i], 'focus', st.zone === Z.DETAIL && dtButton === i);
     setClass(body, 'drawer-open', st.zone === Z.DRAWER);
@@ -443,6 +448,7 @@
     var room = holder.parentNode.offsetHeight, at = rows[index] ? rows[index].offsetTop : 0;
     var shift = Math.max(0, Math.min(holder.offsetHeight - room, at - 3 * 78));   // focused row 4th from the top
     holder.style.webkitTransform = holder.style.transform = 'translateY(' + (-shift) + 'px)';
+    setClass(holder.parentNode, 'goes-on', holder.offsetHeight - room - shift > 8);   // rows still below: the fade says so
   }
 
   function nearest(nodes, x) {
@@ -480,7 +486,7 @@
     buttons.innerHTML = '';
     // Material Symbols Rounded (Apache 2.0) as vectors: sharp at any scale, one stroke weight for the four.
     // Named buttons, as YouTube's and Netflix's: what each does is read, not guessed from an icon.
-    var defs = [['icons/sym-network_wifi.svg', '', 76], ['icons/sym-search.svg', 'Pesquisar', 250],
+    var defs = [['icons/sym-network_wifi.svg', 'Internet', 220], ['icons/sym-search.svg', 'Pesquisar', 250],
       ['icons/sym-tune.svg', 'Controles', 240], ['icons/sym-settings.svg', 'Ajustes', 200]];
     for (var b = 0, x = 1840; b < defs.length; b++) x -= defs[b][2] + (b ? 16 : 0);
     for (b = 0; b < defs.length; b++) {
@@ -521,9 +527,10 @@
       var p = list[c], card = el('div', 'card', holder);
       var img = el('div', 'img', card);
       // Posters only (TMDB's w185, light on memory); the focused title's photo is the showcase above the row.
+      // No service badge: where it streams is said once, under the stage.
       var poster = el('div', 'layer', img);
       poster.style.backgroundImage = 'url("' + (p.poster ? Data.image(p.poster, 'w185') : Data.image(p.backdrop, 'w300')) + '")';
-      if (!p.poster) el('div', 'pname', img, p.title);   // where it streams: said once, under the stage
+      if (!p.poster) el('div', 'pname', img, p.title);
       el('div', 'layer back', img);
       if (p.kind === 'tv' && TAB_KIND[st.tab] === 'mine') episodeBadge(p, img);
       hover(card, Z.CARDS, c);
@@ -550,7 +557,7 @@
     heroWait = 'Procurando ' + g.name.toLowerCase() + ' nos seus apps…';
     Data.byGenre(kind, g, function () {
       heroWait = '';
-      if (Data.GENRES[st.genre] === g && TAB_KIND[st.tab] === kind) renderCards();
+      if (Data.GENRES[st.genre] === g && TAB_KIND[st.tab] === kind && Data.genreNow(kind, g)) renderCards();
     });
     return [];
   }
@@ -558,7 +565,15 @@
   // MARK: - Stage: the focused title large in the middle of its row, its photo whole; its name and where it streams
   // under it, nothing over the photo (as the stage on constanciodev.com.br)
 
-  var heroWait = '';
+  /** "aberto hoje", "aberto ontem", "aberto há 3 dias": when a title in My list was last opened here. */
+  function openedWhen(p) {
+    var recent = Prefs.get('recent', []), at = 0;
+    for (var i = 0; i < recent.length; i++) if (recent[i].id === p.id && recent[i].kind === p.kind) at = recent[i].at || 0;
+    if (!at) return '';
+    var today = new Date(), d = new Date(at), days = Math.round((new Date(today.getFullYear(), today.getMonth(), today.getDate()) -
+      new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000);
+    return days <= 0 ? 'aberto hoje' : days === 1 ? 'aberto ontem' : 'aberto há ' + days + ' dias';
+  }
 
   function showHero() {
     var box = $('herotext'), p = cards[Math.min(st.card, cards.length - 1)];
@@ -571,7 +586,7 @@
     el('div', 'htitle', box, p.title);
     var line = el('div', 'hmeta', box), app = p.app && Data.appFor(p.app);
     var about = (p.meta || '').replace(' · ' + p.service, '').replace(p.service, '');
-    el('span', '', line, [p.year, about].filter(function (x) { return x; }).join(' · '));
+    el('span', '', line, [p.year, about, TAB_KIND[st.tab] === 'mine' ? openedWhen(p) : ''].filter(function (x) { return x; }).join(' · '));
     if (p.service) {
       var where = el('span', 'hwhere' + (app ? '' : ' off'), line);
       if (app) serviceBadge(p, where);
@@ -761,13 +776,13 @@
     var label = $('tilename'), app = st.zone === Z.SHELF ? shelf[st.shelf] : null;
     if (!label) return;
     label.style.opacity = app ? '1' : '0';
-    if (!app) { setClass($('morehint'), 'away', false); return; }
+    var hint = $('morehint');
+    if (!app) { if (hint) setClass(hint, 'left', false); return; }
     label.textContent = app.title;
     var center = tileLeft + (st.shelf - shelfFirst) * tileStep + (tileStep - 48) / 2;
     label.style.left = Math.round(center - 300) + 'px';
-    var hint = $('morehint'), name = label.getBoundingClientRect(), under = hint && hint.getBoundingClientRect();
-    // the bottom line holds one text: the hint gives way while the app's name would cover it
-    if (hint) setClass(hint, 'away', !!under && under.width > 0 && name.left < under.right + 20);
+    // the hint stays visible: it moves to the left end while the app's name would reach it on the right
+    if (hint) setClass(hint, 'left', center + 300 > 1840 - hint.offsetWidth - 20);
   }
 
   // MARK: - System stats (CPU, RAM, network), only while the home screen shows
@@ -790,7 +805,7 @@
 
   /**
    * The network button, icon only: green bars for the Wi-Fi's signal (1 to 4) or the cable when connected, red when
-   * not. OK opens the TV's network settings.
+   * not. OK opens the Internet sheet.
    */
   function showNetwork() {
     var button = $('buttons').children[0], net = lastStats && lastStats.net;
@@ -809,6 +824,7 @@
   function showStats(s) {
     lastStats = s;
     showNetwork();
+    if (st.zone === Z.NET) renderNetwork();
     var box = $('stats');
     if (box) {
       var parts = [], share = s && s.mem ? Math.round(s.mem.usedMb / s.mem.totalMb * 100) : 0;
@@ -1017,12 +1033,16 @@
 
   // MARK: - A title's page (OK on a pick or a search result): what it is and its actions, named, as on Netflix
 
-  var dtTitle = null, dtFrom = null, dtButton = 0;
+  var dtTitle = null, dtFrom = null, dtButton = 0, dtButtons = [];
 
   function detailButtons() {
     var p = dtTitle, out = [], keys = (p && (p.apps || (p.app ? [p.app] : []))) || [], via = p && pickTarget(p);
     if (via && via.params) {   // Home Settings > Open picks in Nuvio: its own link first
-      out.push({label: '▶  Assistir no ' + via.app.title, run: function () { closeDetail(); launcher(via.app.id, via.app.title, via.params)(); }});
+      out.push({label: '▶  Assistir no ' + via.app.title, run: function () {
+        closeDetail();
+        rememberTitle(p);
+        launcher(via.app.id, via.app.title, via.params)();
+      }});
     }
     for (var i = 0; i < keys.length && out.length < 3; i++) {
       (function (key) {
@@ -1033,7 +1053,7 @@
           var q = {};
           for (var k in p) if (p.hasOwnProperty(k)) q[k] = p[k];
           q.app = key;   // the link for the app picked, not the first one
-          openTitle(q, app, null);
+          openTitle(q, app);
         }});
       })(keys[i]);
     }
@@ -1070,11 +1090,13 @@
     el('div', 'dmeta', info, [p.year, about, where].filter(function (x) { return x; }).join('  ·  '));
     if (p.kind === 'tv') {
       Data.episodes(p, function (n) {
-        if (n && dtTitle === p) el('div', 'depisode', info, n.state === 'new' ? episodeText(n) : 'Próximo episódio: ' + episodeText(n));
+        // under the meta line even when the answer comes after the buttons are drawn
+        if (n && dtTitle === p) info.insertBefore(el('div', 'depisode', null, episodeText(n)), info.children[2] || null);
       });
     }
+    if (p.overview) el('div', 'dabout', info, p.overview);
     if (app && p.elsewhere && p.elsewhere.length) el('div', 'delse', info, 'Também em ' + p.elsewhere.slice(0, 3).join(', ') + ' (sem o app)');
-    var row = el('div', 'dbtns', info), buttons = detailButtons();
+    var row = el('div', 'dbtns', info), buttons = dtButtons = detailButtons();   // kept: OK runs what is drawn
     for (var i = 0; i < buttons.length; i++) hover(el('div', 'dbtn' + (i === 0 && app ? ' primary' : ''), row, buttons[i].label), Z.DETAIL, i);
     st.zone = Z.DETAIL;
     setClass(page, 'open', true);
@@ -1085,6 +1107,7 @@
     setClass($('detail'), 'open', false);
     $('detail').innerHTML = '';   // its 1280 px photo leaves memory with it
     st.zone = dtFrom || Z.CARDS;
+    if (st.zone === Z.CARDS && !cards.length) st.zone = Z.SHELF;
     updateFocus();
   }
 
@@ -1163,6 +1186,68 @@
     setClass($('controls'), 'open', false);
     st.zone = Z.TOP;
     st.top = NTABS + 2;
+    updateFocus();
+  }
+
+  // The Internet sheet (top button): LG's settings can't be opened on the Wi-Fi page, so the state is shown here.
+  var NET_STATUS = 3, netRow = 0, netIp = null;
+
+  function networkActions() {
+    return [
+      {label: 'Testar velocidade', run: function () { speedTest(); }},
+      {label: 'Abrir Ajustes da TV', run: function () {
+        closeNetwork();
+        TV.networkSettings(function (ok) { if (!ok) toast('Não deu para abrir os ajustes da TV.'); });
+      }}
+    ];
+  }
+
+  function networkStatus() {
+    var net = lastStats && lastStats.net, wired = !!net && net.kind === 'ethernet';
+    return [
+      ['Internet', !net ? '…' : net.up ? 'Conectada' : 'Desconectada'],
+      [wired ? 'Ligada por' : 'Sinal do Wi-Fi', !net ? '…' : wired ? 'Cabo' : net.signal >= 0 ? net.signal + '%' : '—'],
+      ['Endereço IP', netIp === null ? '…' : netIp || '—']
+    ];
+  }
+
+  function renderNetwork() {
+    var box = $('netpanel').firstChild, status = networkStatus(), actions = networkActions();
+    box.innerHTML = '';
+    el('div', 'title', box, 'Internet');
+    var list = el('div', 'list', box), holder = el('div', 'rows', list), i, row;
+    list.style.height = (NET_STATUS + actions.length) * 78 + 'px';
+    for (i = 0; i < status.length; i++) {
+      row = el('div', 'row', holder, status[i][0]);
+      el('span', 'value', row, status[i][1]);
+    }
+    for (i = 0; i < actions.length; i++) {
+      row = el('div', 'row', holder, actions[i].label);
+      el('span', 'value', row, '›');
+      hover(row, Z.NET, i);
+    }
+    el('div', 'hint', box, 'Wi-Fi fica em Geral → Rede');
+    el('div', 'hint', box, 'OK escolhe · Voltar fecha');
+    updateFocus();
+  }
+
+  function openNetwork() {
+    st.zone = Z.NET;
+    netRow = 0;
+    netIp = null;
+    renderNetwork();
+    setClass($('netpanel'), 'open', true);
+    TV.stats(showStats);
+    TV.about(function (info) {
+      netIp = (info && info.ip) || '';
+      if (st.zone === Z.NET) renderNetwork();
+    });
+  }
+
+  function closeNetwork() {
+    setClass($('netpanel'), 'open', false);
+    st.zone = Z.TOP;
+    st.top = NTABS;
     updateFocus();
   }
 
@@ -1486,7 +1571,7 @@
   var ROTATE_EVERY = 8000;
 
   function rotatePick() {
-    if (!Prefs.get('rotate', true) || document.hidden || saverOn || ambientOn || sheetOpen()) return;
+    if (!Prefs.get('rotate', true) || document.hidden || saverOn || ambientOn || sheetOpen() || moving) return;
     if (st.zone === Z.CARDS || st.zone === Z.DRAWER || cards.length < 2 || Date.now() - idleAt < ROTATE_EVERY) return;
     st.card = (st.card + 1) % cards.length;
     updateFocus();
@@ -1512,7 +1597,7 @@
 
   function srCount() {
     var n = srShown.length;
-    return n ? n + (n > 1 ? ' resultados' : ' resultado') + ' · OK abre · segure OK para o trailer'
+    return n ? n + (n > 1 ? ' resultados' : ' resultado') + ' · OK abre'
       : 'Nada encontrado com esses filtros.';
   }
 
@@ -1563,7 +1648,7 @@
     var inField = typingIn('searchpage');
     page.innerHTML = '';
     var head = el('div', 'shead', page);
-    el('div', 'eyebrow', head, '// Pesquisar');
+    el('div', 'eyebrow', head, 'Pesquisar');
     var field = el('input', '', el('div', 'sfield', head));
     field.type = 'text';
     field.value = typed;
@@ -2052,8 +2137,8 @@
   // Home Settings in named groups, so each option is found by what it changes; the order inside a group is kept.
   function inSections(rows, services) {
     var groups = [
-      ['Perfil', ['Perfil', 'Nome do perfil', 'Cor de destaque', 'Fundo', 'Constelação em movimento', tr('Theme'),
-        'Modo infantil', 'Novo perfil', 'Excluir este perfil']],
+      ['Quem está usando', ['Perfil', 'Nome do perfil', 'Cor de destaque', 'Fundo', 'Constelação em movimento',
+        tr('Theme'), 'Modo infantil', 'Novo perfil', 'Excluir este perfil']],
       ['Tela inicial', ['Topo: jogos dos meus times', 'Topo: Fórmula 1', 'Topo: manchetes', 'Times', tr('Shelf'),
         'Ordem dos apps', 'Destaque girando', tr('Picks per tab'), tr('Cartoons and anime'), 'Painel de desempenho',
         tr('Weather widget'), tr('City'), tr('Forecast')]],
@@ -2564,6 +2649,13 @@
     $('tilename').textContent = '← mover →';
   }
 
+  /** A move or a held OK left behind by another app taking over: both end without saving anything new. */
+  function endPress() {
+    clearTimeout(holdTimer);
+    holdTimer = 0;
+    if (moving) { moving = false; renderShelf(); }
+  }
+
   function stopMoving() {
     moving = false;
     renderShelf();
@@ -2669,7 +2761,7 @@
   /** What My list and the recent titles keep of a title: enough to draw its card and open it. */
   function keptTitle(p) {
     return {id: p.id, kind: p.kind, title: p.title, poster: p.poster, backdrop: p.backdrop, app: p.app, apps: p.apps,
-      service: p.service, meta: p.meta, year: p.year || '', genres: p.genres || []};
+      service: p.service, meta: p.meta, year: p.year || '', genres: p.genres || [], overview: p.overview || ''};
   }
 
   function countLaunch(id) {
@@ -2689,22 +2781,28 @@
 
   var DAYS = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
 
-  /** "Novo episódio" or "T2E5 · sexta": what a series in My list has this week. */
+  /** "Episódio 8 novo" or "Episódio 8 chega terça": what a series in My list has this week. */
   function episodeText(n) {
-    var ep = 'T' + n.season + 'E' + n.episode;
-    return n.state === 'new' ? 'Novo episódio · ' + ep : ep + ' · ' + DAYS[new Date(n.at).getDay()];
+    return 'Episódio ' + n.episode + (n.state === 'new' ? ' novo' : ' chega ' + DAYS[new Date(n.at).getDay()]);
+  }
+
+  /** The same news in a poster's width: "Novo ep. 8" or "Ep. 8 · terça". */
+  function episodeShort(n) {
+    return n.state === 'new' ? 'Novo ep. ' + n.episode : 'Ep. ' + n.episode + ' · ' + DAYS[new Date(n.at).getDay()];
   }
 
   function episodeBadge(p, holder) {
     Data.episodes(p, function (n) {
       if (!n || !holder.parentNode) return;
-      el('div', 'epbadge' + (n.state === 'new' ? ' fresh' : ''), holder, episodeText(n));
+      el('div', 'epbadge' + (n.state === 'new' ? ' fresh' : ''), holder, episodeShort(n));
     });
   }
 
+  function savedAndRecent() { return Prefs.get('mylist', []).concat(Prefs.get('recent', [])); }
+
   /** Saved titles first, then the ones opened lately, without repeats: the My list tab. */
   function myList() {
-    var out = [], seen = {}, all = Prefs.get('mylist', []).concat(Prefs.get('recent', []));
+    var out = [], seen = {}, all = savedAndRecent();
     for (var i = 0; i < all.length; i++) {
       var k = all[i].kind + ':' + all[i].id;
       if (seen[k] || !all[i].backdrop) continue;
@@ -2716,7 +2814,7 @@
 
   /** In the My list tab: saved, or opened lately (both show there, so both can be taken out). */
   function inMyList(p) {
-    var list = Prefs.get('mylist', []).concat(Prefs.get('recent', []));
+    var list = savedAndRecent();
     for (var i = 0; i < list.length; i++) if (list[i].id === p.id && list[i].kind === p.kind) return true;
     return false;
   }
@@ -2733,6 +2831,7 @@
 
   function rememberTitle(p) {
     var item = keptTitle(p);
+    item.at = Date.now();
     var list = Prefs.get('recent', []).filter(function (r) { return !(r.id === p.id && r.kind === p.kind); });
     list.unshift(item);
     Prefs.set('recent', list.slice(0, RECENT_MAX));
@@ -2753,7 +2852,7 @@
     switch (st.zone) {
       case Z.TOP:
         if (st.top < NTABS) return;
-        if (st.top === NTABS) TV.networkSettings(function (ok) { if (!ok) toast('Não deu para abrir a rede da TV.'); });
+        if (st.top === NTABS) openNetwork();
         else if (st.top === NTABS + 1) openSearch();
         else if (st.top === NTABS + 2) openControls();
         else openSettings();
@@ -2801,11 +2900,14 @@
       case Z.CTRL:
         controlRows()[ctrlRow].run(1);
         return;
+      case Z.NET:
+        networkActions()[netRow].run();
+        return;
       case Z.HELP:
         closeHelp();
         return;
       case Z.DETAIL:
-        detailButtons()[dtButton].run();
+        if (dtButtons[dtButton]) dtButtons[dtButton].run();
         return;
       case Z.PAIR:
         closePairing();
@@ -2826,6 +2928,8 @@
     holder.style.webkitTransition = holder.style.transition = '';
   }
 
+  function focusGenres() { st.zone = Z.GENRE; genreAt = st.genre; }
+
   function move(dx, dy) {
     if (st.zone === Z.HELP) closeHelp();   // the guide never holds the arrows: they close it and move on
     var tiles = $('tiles').children, cardNodes = $('cards').children;
@@ -2835,13 +2939,13 @@
         else if (dy > 0) { openDrawer(); return; }   // the next row: its header shows at the bottom of the screen
         else if (dy < 0) {
           if (cards.length) { st.zone = Z.CARDS; st.card = nearest(cardNodes, centerX(tiles[st.shelf])); }
-          else if (Data.hasKey()) { st.zone = Z.GENRE; genreAt = st.genre; }
+          else if (Data.hasKey()) focusGenres();
           else { st.zone = Z.TOP; st.top = NTABS + 1; }
         }
         break;
       case Z.CARDS:
         if (dx) st.card = Math.max(0, Math.min(cards.length - 1, st.card + dx));
-        else if (dy < 0) { st.zone = Z.GENRE; genreAt = st.genre; }
+        else if (dy < 0) focusGenres();
         else if (shelf.length) { st.zone = Z.SHELF; st.shelf = nearest(tiles, centerX(cardNodes[st.card])); }
         break;
       case Z.GENRE:
@@ -2858,7 +2962,7 @@
         else if (dy < 0 && !inMenu) { lastTab = st.top; st.top = NTABS + 1; }   // up to the menu, on Search
         else if (dy > 0 && inMenu && tabs) st.top = lastTab;
         else if (dy > 0) {
-          if (tabs) { st.zone = Z.GENRE; genreAt = st.genre; }
+          if (tabs) focusGenres();
           else st.zone = Z.SHELF;
         }
         break;
@@ -2894,11 +2998,14 @@
         moveSearch(dx, dy);
         break;
       case Z.DETAIL:
-        if (dx) dtButton = Math.max(0, Math.min(detailButtons().length - 1, dtButton + dx));
+        if (dx) dtButton = Math.max(0, Math.min(dtButtons.length - 1, dtButton + dx));
         break;
       case Z.CTRL:
         if (dy) ctrlRow = Math.max(0, Math.min(controlRows().length - 1, ctrlRow + dy));
         else if (dx && controlRows()[ctrlRow].step) controlRows()[ctrlRow].step(dx);
+        break;
+      case Z.NET:
+        if (dy) netRow = Math.max(0, Math.min(networkActions().length - 1, netRow + dy));
         break;
       case Z.TEAMS:
         if (dy) tmRow = Math.max(0, Math.min(tmList.length - 1, tmRow + dy));
@@ -2924,6 +3031,7 @@
     if (st.zone === Z.SEARCH) { closeSearch(); return; }
     if (st.zone === Z.TEAMS) { closeTeams(); return; }
     if (st.zone === Z.CTRL) { closeControls(); return; }
+    if (st.zone === Z.NET) { closeNetwork(); return; }
     if (st.zone === Z.HELP) { closeHelp(); return; }
     if (st.zone === Z.DETAIL) { closeDetail(); return; }
     if (st.zone === Z.PAIR) { closePairing(); return; }
@@ -2937,12 +3045,13 @@
   /** The pointer focuses what it's over (the Magic Remote, or a mouse when previewing). */
   function hover(node, zone, index) {
     node.onmouseover = function () {
-      if (moving || saverOn || (sheetOpen() !== (zone === Z.APPS || zone === Z.SETTINGS || zone === Z.EDIT || zone === Z.LANG || zone === Z.CITY || zone === Z.KEY || zone === Z.ABOUT || zone === Z.SEARCH || zone === Z.TEAMS || zone === Z.CTRL || zone === Z.DETAIL))) return;
+      if (moving || saverOn || (sheetOpen() !== (zone === Z.APPS || zone === Z.SETTINGS || zone === Z.EDIT || zone === Z.LANG || zone === Z.CITY || zone === Z.KEY || zone === Z.ABOUT || zone === Z.SEARCH || zone === Z.TEAMS || zone === Z.CTRL || zone === Z.NET || zone === Z.DETAIL))) return;
       if (zone === Z.DRAWER && st.zone !== Z.DRAWER) return;
       if (zone !== Z.DRAWER && st.zone === Z.DRAWER && zone !== Z.SHELF) return;
       if (zone === Z.TOP && index < NTABS && !Data.hasKey()) return;   // the tabs are hidden without the picks
       if (zone === Z.SHELF && st.zone === Z.DRAWER) closeDrawer();
       st.zone = zone;
+      if (zone !== Z.GENRE) clearTimeout(genreTimer);
       if (zone === Z.TOP) { st.top = index; if (index < NTABS) selectTab(index); }
       else if (zone === Z.CARDS) st.card = index;
       else if (zone === Z.GENRE) { genreAt = index; genreSoon(); }
@@ -2956,6 +3065,7 @@
       else if (zone === Z.KEY) st.key = index;
       else if (zone === Z.TEAMS) tmRow = index;
       else if (zone === Z.CTRL) ctrlRow = index;
+      else if (zone === Z.NET) netRow = index;
       else if (zone === Z.DETAIL) dtButton = index;
       else if (zone === Z.SEARCH) {
         srPart = Math.floor(index / 1000);
@@ -3197,12 +3307,14 @@
   function reset() {
     hideSaver();
     hideAmbient();
+    endPress();
     // Home (or opening the app again) lands on the home screen, whatever page was open
     if ($('searchpage').className.indexOf('open') >= 0) closeSearch();
     if ($('detail').className.indexOf('open') >= 0) closeDetail();
     if ($('pairing').className.indexOf('open') >= 0) closePairing();
     setClass($('help'), 'open', false);
     setClass($('controls'), 'open', false);
+    setClass($('netpanel'), 'open', false);
     setClass($('teampick'), 'open', false);
     closeSheets();
     st.zone = Z.SHELF;
@@ -3239,7 +3351,15 @@
   document.addEventListener('webOSRelaunch', reopened);   // LG: opened again while running
   window.addEventListener('appcontrol', reopened);        // Samsung: the same
   document.addEventListener('visibilitychange', function () {
-    if (document.hidden) { hideSaver(); hideAmbient(); releaseImages(); if (st.zone === Z.SEARCH) closeSearch(); return; }
+    if (document.hidden) {
+      hideSaver();
+      hideAmbient();
+      releaseImages();
+      endPress();
+      if ($('detail').className.indexOf('open') >= 0) closeDetail();
+      if ($('searchpage').className.indexOf('open') >= 0) closeSearch();
+      return;
+    }
     idleAt = Date.now();
     restoreImages();
     okDown = false;   // a key held while another app took over never sends its keyup here
