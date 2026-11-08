@@ -12,8 +12,8 @@ nunca sai do app. Para digitar pelo celular, aponte a câmera para o QR code do 
 
 Tudo à vista, sem gesto escondido (o padrão de Netflix e YouTube):
 
-- **Topo, duas linhas:** em cima, o menu (ícone de rede verde com barras ou vermelho, Pesquisar, Controles,
-  Ajustes); embaixo, as abas Explorar, Filmes, Séries e Minha lista e um cartão de informação que reveza jogo, F1
+- **Topo, duas linhas:** em cima, o menu (Internet, ícone verde com barras ou vermelho: abre sinal, IP e teste; Pesquisar,
+  Controles, Ajustes); embaixo, as abas Explorar, Filmes, Séries e Minha lista e um cartão de informação que reveza jogo, F1
   e manchete (jogo ao vivo fica fixo). ← → anda na linha; ↑ ↓ troca de linha.
 - **Gêneros:** abaixo das abas, Tudo, Comédia, Ação, Drama, Terror… (só títulos dos seus apps). No Pesquisar, o
   botão Gênero sem digitar nada lista o gênero inteiro.

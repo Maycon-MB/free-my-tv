@@ -388,14 +388,14 @@
 
   // MARK: - Focus
 
-  var Z = {TOP: 'top', GENRE: 'genre', CARDS: 'cards', SHELF: 'shelf', DRAWER: 'drawer', APPS: 'apps', SETTINGS: 'settings', EDIT: 'edit', LANG: 'lang', CITY: 'city', KEY: 'key', ABOUT: 'about', SEARCH: 'search', TEAMS: 'teams', CTRL: 'ctrl', HELP: 'help', DETAIL: 'detail', PAIR: 'pair'};
+  var Z = {TOP: 'top', GENRE: 'genre', CARDS: 'cards', SHELF: 'shelf', DRAWER: 'drawer', APPS: 'apps', SETTINGS: 'settings', EDIT: 'edit', LANG: 'lang', CITY: 'city', KEY: 'key', ABOUT: 'about', SEARCH: 'search', TEAMS: 'teams', CTRL: 'ctrl', NET: 'net', HELP: 'help', DETAIL: 'detail', PAIR: 'pair'};
   var st = {zone: Z.SHELF, top: 0, tab: 0, card: 0, shelf: 0, drawer: 0, grid: 0, row: 0, edit: 0, lang: 0, city: 0, key: 0};
   var cards = [];
   var genreAt = 0, genreTimer = 0;   // the chip with focus; st.genre is the one applied
   var heroWait = '';   // the stage's line while a genre's titles load
   st.genre = 0;
 
-  function sheetOpen() { return st.zone === Z.APPS || st.zone === Z.SETTINGS || st.zone === Z.EDIT || st.zone === Z.LANG || st.zone === Z.CITY || st.zone === Z.KEY || st.zone === Z.ABOUT || st.zone === Z.SEARCH || st.zone === Z.TEAMS || st.zone === Z.CTRL || st.zone === Z.HELP || st.zone === Z.DETAIL || st.zone === Z.PAIR; }
+  function sheetOpen() { return st.zone === Z.APPS || st.zone === Z.SETTINGS || st.zone === Z.EDIT || st.zone === Z.LANG || st.zone === Z.CITY || st.zone === Z.KEY || st.zone === Z.ABOUT || st.zone === Z.SEARCH || st.zone === Z.TEAMS || st.zone === Z.CTRL || st.zone === Z.NET || st.zone === Z.HELP || st.zone === Z.DETAIL || st.zone === Z.PAIR; }
 
   function updateFocus() {
     var i, list;
@@ -434,6 +434,7 @@
     focusSearch();
     focusRows($('teampick'), tmRow, st.zone === Z.TEAMS);
     focusRows($('controls'), ctrlRow, st.zone === Z.CTRL);
+    focusRows($('netpanel'), NET_STATUS + netRow, st.zone === Z.NET);
     var dbs = document.querySelectorAll('#detail .dbtn');
     for (i = 0; i < dbs.length; i++) setClass(dbs[i], 'focus', st.zone === Z.DETAIL && dtButton === i);
     setClass(body, 'drawer-open', st.zone === Z.DRAWER);
@@ -795,7 +796,7 @@
 
   /**
    * The network button, icon only: green bars for the Wi-Fi's signal (1 to 4) or the cable when connected, red when
-   * not. OK opens the TV's network settings.
+   * not. OK opens the Internet sheet.
    */
   function showNetwork() {
     var button = $('buttons').children[0], net = lastStats && lastStats.net;
@@ -814,6 +815,7 @@
   function showStats(s) {
     lastStats = s;
     showNetwork();
+    if (st.zone === Z.NET) renderNetwork();
     var box = $('stats');
     if (box) {
       var parts = [], share = s && s.mem ? Math.round(s.mem.usedMb / s.mem.totalMb * 100) : 0;
@@ -1175,6 +1177,68 @@
     setClass($('controls'), 'open', false);
     st.zone = Z.TOP;
     st.top = NTABS + 2;
+    updateFocus();
+  }
+
+  // The Internet sheet (top button): LG's settings can't be opened on the Wi-Fi page, so the state is shown here.
+  var NET_STATUS = 3, netRow = 0, netIp = null;
+
+  function networkActions() {
+    return [
+      {label: 'Testar velocidade', run: function () { speedTest(); }},
+      {label: 'Abrir Ajustes da TV', run: function () {
+        closeNetwork();
+        TV.networkSettings(function (ok) { if (!ok) toast('Não deu para abrir os ajustes da TV.'); });
+      }}
+    ];
+  }
+
+  function networkStatus() {
+    var net = lastStats && lastStats.net, wired = !!net && net.kind === 'ethernet';
+    return [
+      ['Internet', !net ? '…' : net.up ? 'Conectada' : 'Desconectada'],
+      [wired ? 'Ligada por' : 'Sinal do Wi-Fi', !net ? '…' : wired ? 'Cabo' : net.signal >= 0 ? net.signal + '%' : '—'],
+      ['Endereço IP', netIp === null ? '…' : netIp || '—']
+    ];
+  }
+
+  function renderNetwork() {
+    var box = $('netpanel').firstChild, status = networkStatus(), actions = networkActions();
+    box.innerHTML = '';
+    el('div', 'title', box, 'Internet');
+    var list = el('div', 'list', box), holder = el('div', 'rows', list), i, row;
+    list.style.height = (NET_STATUS + actions.length) * 78 + 'px';
+    for (i = 0; i < status.length; i++) {
+      row = el('div', 'row', holder, status[i][0]);
+      el('span', 'value', row, status[i][1]);
+    }
+    for (i = 0; i < actions.length; i++) {
+      row = el('div', 'row', holder, actions[i].label);
+      el('span', 'value', row, '›');
+      hover(row, Z.NET, i);
+    }
+    el('div', 'hint', box, 'Wi-Fi fica em Geral → Rede');
+    el('div', 'hint', box, 'OK escolhe · Voltar fecha');
+    updateFocus();
+  }
+
+  function openNetwork() {
+    st.zone = Z.NET;
+    netRow = 0;
+    netIp = null;
+    renderNetwork();
+    setClass($('netpanel'), 'open', true);
+    TV.stats(showStats);
+    TV.about(function (info) {
+      netIp = (info && info.ip) || '';
+      if (st.zone === Z.NET) renderNetwork();
+    });
+  }
+
+  function closeNetwork() {
+    setClass($('netpanel'), 'open', false);
+    st.zone = Z.TOP;
+    st.top = NTABS;
     updateFocus();
   }
 
@@ -2778,7 +2842,7 @@
     switch (st.zone) {
       case Z.TOP:
         if (st.top < NTABS) return;
-        if (st.top === NTABS) TV.networkSettings(function (ok) { if (!ok) toast('Não deu para abrir a rede da TV.'); });
+        if (st.top === NTABS) openNetwork();
         else if (st.top === NTABS + 1) openSearch();
         else if (st.top === NTABS + 2) openControls();
         else openSettings();
@@ -2825,6 +2889,9 @@
         return;
       case Z.CTRL:
         controlRows()[ctrlRow].run(1);
+        return;
+      case Z.NET:
+        networkActions()[netRow].run();
         return;
       case Z.HELP:
         closeHelp();
@@ -2927,6 +2994,9 @@
         if (dy) ctrlRow = Math.max(0, Math.min(controlRows().length - 1, ctrlRow + dy));
         else if (dx && controlRows()[ctrlRow].step) controlRows()[ctrlRow].step(dx);
         break;
+      case Z.NET:
+        if (dy) netRow = Math.max(0, Math.min(networkActions().length - 1, netRow + dy));
+        break;
       case Z.TEAMS:
         if (dy) tmRow = Math.max(0, Math.min(tmList.length - 1, tmRow + dy));
         else if (dx) { tmLeague = (tmLeague + dx + LEAGUES.length) % LEAGUES.length; loadTeams(); }
@@ -2951,6 +3021,7 @@
     if (st.zone === Z.SEARCH) { closeSearch(); return; }
     if (st.zone === Z.TEAMS) { closeTeams(); return; }
     if (st.zone === Z.CTRL) { closeControls(); return; }
+    if (st.zone === Z.NET) { closeNetwork(); return; }
     if (st.zone === Z.HELP) { closeHelp(); return; }
     if (st.zone === Z.DETAIL) { closeDetail(); return; }
     if (st.zone === Z.PAIR) { closePairing(); return; }
@@ -2964,7 +3035,7 @@
   /** The pointer focuses what it's over (the Magic Remote, or a mouse when previewing). */
   function hover(node, zone, index) {
     node.onmouseover = function () {
-      if (moving || saverOn || (sheetOpen() !== (zone === Z.APPS || zone === Z.SETTINGS || zone === Z.EDIT || zone === Z.LANG || zone === Z.CITY || zone === Z.KEY || zone === Z.ABOUT || zone === Z.SEARCH || zone === Z.TEAMS || zone === Z.CTRL || zone === Z.DETAIL))) return;
+      if (moving || saverOn || (sheetOpen() !== (zone === Z.APPS || zone === Z.SETTINGS || zone === Z.EDIT || zone === Z.LANG || zone === Z.CITY || zone === Z.KEY || zone === Z.ABOUT || zone === Z.SEARCH || zone === Z.TEAMS || zone === Z.CTRL || zone === Z.NET || zone === Z.DETAIL))) return;
       if (zone === Z.DRAWER && st.zone !== Z.DRAWER) return;
       if (zone !== Z.DRAWER && st.zone === Z.DRAWER && zone !== Z.SHELF) return;
       if (zone === Z.TOP && index < NTABS && !Data.hasKey()) return;   // the tabs are hidden without the picks
@@ -2984,6 +3055,7 @@
       else if (zone === Z.KEY) st.key = index;
       else if (zone === Z.TEAMS) tmRow = index;
       else if (zone === Z.CTRL) ctrlRow = index;
+      else if (zone === Z.NET) netRow = index;
       else if (zone === Z.DETAIL) dtButton = index;
       else if (zone === Z.SEARCH) {
         srPart = Math.floor(index / 1000);
@@ -3232,6 +3304,7 @@
     if ($('pairing').className.indexOf('open') >= 0) closePairing();
     setClass($('help'), 'open', false);
     setClass($('controls'), 'open', false);
+    setClass($('netpanel'), 'open', false);
     setClass($('teampick'), 'open', false);
     closeSheets();
     st.zone = Z.SHELF;

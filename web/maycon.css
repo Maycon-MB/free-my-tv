@@ -396,8 +396,8 @@ body:not(.night) #news .rates { background: #F5F5F7; }
 #searchpage .qr { position: absolute; right: 0; top: 0; width: 200px; height: 200px; border-radius: 14px; }
 #searchpage .sfield, #searchpage .chips, #searchpage .sstatus, #searchpage .phone { margin-right: 240px; }
 
-/* Controls sheet: the same box as the team picker. */
-#controls .box {
+/* Controls and Internet sheets: the same box as the team picker. */
+#controls .box, #netpanel .box {
   position: absolute;
   left: 560px;
   top: 150px;
