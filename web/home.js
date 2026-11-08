@@ -308,10 +308,9 @@
       opening = {at: 0, title: ''};
       if (!params) {
         launcher(app.id, app.title, null)();
-        TV.service('typeLater', {title: p.title, appId: app.id}, function (res) {
-          toast(res ? 'Abrindo ' + app.title + ': abra a busca dele e “' + p.title + '” será digitado sozinho.'
-            : 'Abrindo ' + app.title + ': procure “' + p.title + '” lá dentro.');
-        });
+        // Tried quietly: apps that draw their own keyboard (Globoplay) never tell the TV a field took the focus
+        TV.service('typeLater', {title: p.title, appId: app.id});
+        toast('Abrindo ' + app.title + ': procure “' + p.title + '” lá dentro.');
       } else if (warm) {
         countLaunch(app.id);
         TV.service('openWarm', {id: app.id, params: params, title: p.title}, function (res) {
@@ -566,6 +565,16 @@
   // MARK: - Stage: the focused title large in the middle of its row, its photo whole; its name and where it streams
   // under it, nothing over the photo (as the stage on constanciodev.com.br)
 
+  /** "aberto hoje", "aberto ontem", "aberto há 3 dias": when a title in My list was last opened here. */
+  function openedWhen(p) {
+    var recent = Prefs.get('recent', []), at = 0;
+    for (var i = 0; i < recent.length; i++) if (recent[i].id === p.id && recent[i].kind === p.kind) at = recent[i].at || 0;
+    if (!at) return '';
+    var today = new Date(), d = new Date(at), days = Math.round((new Date(today.getFullYear(), today.getMonth(), today.getDate()) -
+      new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000);
+    return days <= 0 ? 'aberto hoje' : days === 1 ? 'aberto ontem' : 'aberto há ' + days + ' dias';
+  }
+
   function showHero() {
     var box = $('herotext'), p = cards[Math.min(st.card, cards.length - 1)];
     if (!box) return;
@@ -577,7 +586,7 @@
     el('div', 'htitle', box, p.title);
     var line = el('div', 'hmeta', box), app = p.app && Data.appFor(p.app);
     var about = (p.meta || '').replace(' · ' + p.service, '').replace(p.service, '');
-    el('span', '', line, [p.year, about].filter(function (x) { return x; }).join(' · '));
+    el('span', '', line, [p.year, about, TAB_KIND[st.tab] === 'mine' ? openedWhen(p) : ''].filter(function (x) { return x; }).join(' · '));
     if (p.service) {
       var where = el('span', 'hwhere' + (app ? '' : ' off'), line);
       if (app) serviceBadge(p, where);
@@ -2822,6 +2831,7 @@
 
   function rememberTitle(p) {
     var item = keptTitle(p);
+    item.at = Date.now();
     var list = Prefs.get('recent', []).filter(function (r) { return !(r.id === p.id && r.kind === p.kind); });
     list.unshift(item);
     Prefs.set('recent', list.slice(0, RECENT_MAX));

@@ -924,9 +924,16 @@ var Data = (function () {
   }
 
   /** Higher first: what the TV can play, then the closest name, then popularity; extras and unrated go down. */
+  /** What this home has shown it likes: a title opened before, and the apps it opens most. */
+  function familyBonus(p) {
+    var opened = Prefs.get('recent', []).concat(Prefs.get('mylist', [])), usage = Prefs.get('usage', {}), app = p.app && appFor(p.app);
+    for (var i = 0; i < opened.length; i++) if (opened[i].id === p.id && opened[i].kind === p.kind) return 1.5;
+    return app ? Math.min(0.8, Math.log(1 + (usage[app.id] || 0)) / 5) : 0;
+  }
+
   function score(p, query) {
     var near = Math.max(likeness(p.title, query), likeness(p.original, query));
-    var s = (p.app && usable(p.app) ? 2 : 0) + near * 1.5 + Math.min(1, Math.log(1 + p.popularity) / 6);
+    var s = (p.app && usable(p.app) ? 2 : 0) + near * 1.5 + Math.min(1, Math.log(1 + p.popularity) / 6) + familyBonus(p);
     if (EXTRAS.test(p.title) || p.votes < 3) s -= 1.5;
     return s;
   }
