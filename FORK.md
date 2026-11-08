@@ -161,44 +161,12 @@ que sobra, estudado no [Glasshouse](https://github.com/rorygallagher2024/glassho
 Pelo SSH da TV: `luna-send-pub -n 1 luna://io.freemytv.service/notes '{}'` mostra os últimos 40 registros do app
 (o que foi aberto, erros), e `.../backHome '{"on":true}'` as últimas trocas de app. Ficam só na memória.
 
-## Próximos passos (revisão de 2026-11-07, aprovados pelo dono)
+## Revisão de 2026-11-07 (feita)
 
-Cinco revisões com as skills (seguranca, regras-de-negocio + comentarios, bugs, frontend-design, documentacao).
-O dono aprovou os quatro pacotes. Feitos sem a TV, em branches no GitHub, a instalar e testar na TV antes de juntar:
-`feat/digita-titulo-no-app` (digitação automática), `fix/revisao-bugs` (A), `fix/revisao-visual` (C),
-`fix/revisao-seguranca` (B) e esta documentação. Na segurança, conferir nas notas os nomes dos chamadores
-("chamado por …"): se o próprio app aparecer com outro nome, ele é recusado e precisa entrar em `CALLERS`.
-
-**A. Bugs**
-1. Gênero com lista vazia (sem chave TMDB ou falha) pede de novo sem parar: guardar o vazio por 1 min em
-   `byGenre` (`web/data.js`) e só redesenhar em `cardList` quando `Data.genreNow` tiver resposta.
-2. Home durante "mover app": `reset()` e `visibilitychange` param o modo mover e o `holdTimer`.
-3. Página do título aberta pela pesquisa + Home: ao esconder, fechar detalhe e pesquisa pela classe `open`, não pela zona.
-4. Tirar o último título da Minha lista e voltar: `closeDetail` manda o foco à fileira de apps se não há cartões.
-5. Links do Disney+/Prime/Apple dependem do "Voltar ao Free My TV": assinar o app em primeiro plano também com
-   `warm.id`/`later.text` e só relançar o Free My TV com `back.on`.
-6. Menores: `.tile.moving::after` com cor que não é vermelha perde o tracejado (`accents.css`); `rotatePick` apaga
-   "← mover →"; gênero aplicado tarde quando o ponteiro já foi para os cartões; botões do detalhe guardados em `openDetail`.
-
-**B. Segurança**
-1. O serviço atende qualquer chamador do luna: recusar quem não é `io.freemytv` (`message.sender`) nos métodos que agem.
-2. Chave do TMDB fora do `backup` (ou arquivo com modo 0600); arquivo de celulares com modo 0600.
-3. Teto global de erros por código de pareamento; `req.destroy()` ao passar do limite do corpo; Max-Age do cookie 30 dias.
-4. Limite de entradas nos caches `primeIds`/`appleUrls` e uma busca por vez; cortar o trecho do HTML antes da regex do Prime.
-5. `ssap` não devolver o `clientKey`; `notes` só para o próprio app.
-
-**C. Visual**
-1. Aviso (`#toast`) acima da fileira de apps, não por cima do menu.
-2. Dica "▼ Entradas…" sempre visível, no canto direito.
-3. Ajustes: mostrar que a lista continua; seção "Perfil" sem repetir a linha; fundo escuro atrás da janela.
-4. Pesquisa legível: sem "// PESQUISAR" e sem Mono maiúsculo pequeno; tirar "segure OK para o trailer".
-5. Resumo do filme na página do título (`overview` já vem do TMDB); "Episódio 8 chega terça" no lugar de "T1E8 · terça".
-6. Wi-Fi com nome; um só jeito de mostrar o foco; gaveta com títulos em Inter; palco sem metade vazia ao abrir.
-
-**D. Organização e docs**
-1. A regra "como cada app abre o título" num lugar só (`TITLE_LINKS` com `warm` e a busca de id), sem `WARM_FIRST` no home.js.
-2. `openTitle` sem o parâmetro morto; Nuvio passando por ele; `warm` e `later` se cancelam (feito).
-3. Apagar CSS e campos mortos do cartão antigo; comentários com histórico; docstrings de contrato em `TV.service`,
-   `serviceName`, `GENRES`, `openWarm`, `typeLater`.
-4. FORK.md: "Como usar em 5 linhas" no topo, "Se algo der errado", corrigir o caminho do script de renovação
-   (barra invertida) e o `|` da linha do Apple TV na tabela; juntar linhas repetidas de "O que muda".
+Cinco revisões com as skills (seguranca, regras-de-negocio + comentarios, bugs, frontend-design, documentacao),
+aplicadas e testadas na TV: bugs (gênero que podia travar, Home no mover app, pesquisa aberta por trás, foco
+sumindo, links sem o "Voltar ao Free My TV"), visual (aviso acima dos apps, dica ▼ fixa, botão Internet com
+painel, resumo do filme, episódio por extenso, foco vermelho), segurança (o serviço só atende `io.freemytv` e o
+shell; arquivos 0600; limites no pareamento e nas buscas) e organização (regra de links em `TITLE_LINKS`).
+Também: Terror e Romance em Séries por palavra-chave do TMDB, busca com peso no que a casa já abriu, e
+"aberto há N dias" na Minha lista. A digitação automática não funciona no Globoplay (teclado próprio).
